@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PIO Device Sender</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --fg: #b4b4b4;
+      --dim: #777;
+      --bright: #eee;
+      --ok: #4a9;
+      --bad: #e55;
+      --warn: #db4;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      user-select: none;
+    }
+
+    #ui {
+      width: 460px;
+      padding: 24px;
+    }
+
+    h2 {
+      color: var(--bright);
+      font-size: 15px;
+      margin-bottom: 14px;
+    }
+
+    h3 {
+      color: var(--dim);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin: 16px 0 6px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 4px;
+    }
+
+    .k {
+      color: var(--dim);
+      display: inline-block;
+      min-width: 190px;
+    }
+
+    .v {
+      color: var(--bright);
+      font-weight: bold;
+    }
+
+    .ok {
+      color: var(--ok)
+    }
+
+    .bad {
+      color: var(--bad)
+    }
+
+    .warn {
+      color: var(--warn)
+    }
+
+    button {
+      margin: 4px 4px 0 0;
+      padding: 6px 16px;
+      font: 13px ui-monospace, monospace;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: #3a3a3a;
+      color: #ccc;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      background: #4a4a4a;
+    }
+
+    button:disabled {
+      opacity: .35;
+      cursor: default;
+    }
+
+    button.primary {
+      background: #2a5a3a;
+      border-color: #3a7a3a;
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: #357545;
+    }
+
+    button.danger {
+      background: #5a2a2a;
+      border-color: #7a3a3a;
+    }
+
+    label {
+      color: var(--dim);
+      font-size: 12px;
+      display: block;
+      margin-top: 8px;
+      cursor: pointer;
+    }
+
+    label input {
+      vertical-align: -1px;
+      margin-right: 5px;
+    }
+
+    #hint {
+      color: var(--dim);
+      font-size: 11px;
+      margin-top: 16px;
+      line-height: 1.7;
+    }
+
+    code {
+      color: #c9a;
+    }
+
+    body.grabbed #ui {
+      opacity: .55;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="ui">
+    <h2>PIO Device Sender</h2>
+
+    <h3>Device</h3>
+    <div><span class="k">状态</span><span class="v bad" id="d-st">未连接</span></div>
+    <div><span class="k">orientation</span><span class="v" id="d-or">—</span></div>
+    <div>
+      <button id="btn-conn" class="primary">连接 HID</button>
+      <button id="btn-disc" class="danger" disabled>断开</button>
+    </div>
+
+    <h3>Capture</h3>
+    <div><span class="k">独占</span><span class="v" id="c-grab">off</span></div>
+    <div><span class="k">鼠标源</span><span class="v" id="c-src">—</span></div>
+    <div><span class="k">movementX 语义</span><span class="v" id="c-sem">—</span></div>
+    <div><span class="k">原始位移(无系统加速)</span><span class="v" id="c-unadj">—</span></div>
+    <div><span class="k">键盘独占</span><span class="v" id="c-kbd">—</span></div>
+    <div>
+      <button id="btn-grab" disabled>开始独占</button>
+    </div>
+    <label><input type="checkbox" id="opt-kbd" checked> 全屏 + Keyboard Lock（可转发 Esc / Tab / Win 等系统键）</label>
+    <label><input type="checkbox" id="opt-unadj" checked> unadjustedMovement（绕过系统鼠标加速曲线）</label>
+    <label><input type="checkbox" id="opt-esc-single" checked> 单击 Esc 退出（Keyboard Lock 无需长按）</label>
+
+    <h3>Pipeline</h3>
+    <div><span class="k">输入事件速率</span><span class="v" id="p-in">0 Hz</span></div>
+    <div><span class="k">HID 发送速率</span><span class="v" id="p-out">0 Hz</span></div>
+    <div><span class="k">sendReport 往返延迟</span><span class="v" id="p-rtt">—</span></div>
+    <div><span class="k">在途(in-flight)</span><span class="v" id="p-inflight">0</span></div>
+    <div><span class="k">合并比 (输入:发送)</span><span class="v" id="p-merge">—</span></div>
+    <div><span class="k">帧边界补偿量</span><span class="v" id="p-corr">—</span></div>
+    <div><span class="k">丢失位移</span><span class="v ok" id="p-lost">0 px（设计上不可能）</span></div>
+    <div><span class="k">发送错误</span><span class="v ok" id="p-err">0</span></div>
+
+    <h3>Lua</h3>
+    <span class="k">Cmd 0xFA — on_custom_event(str)</span>
+    <div style="margin-top:6px;display:flex;gap:4px">
+      <input type="text" id="lua-input" maxlength="62" placeholder="文本发送到设备 Lua…" style="flex:1;padding:4px 8px;font:13px monospace;background:#2a2a2a;border:1px solid #555;border-radius:4px;color:#ccc">
+      <button id="btn-lua-send" onclick="sendLua()" disabled>发送</button>
+    </div>
+    <div><span class="k">状态</span><span class="v" id="lua-st">—</span></div>
+
+    <div id="hint">
+      ① <b>连接 HID</b> → 选择设备。<br>
+      ② <b>开始独占</b> → 键鼠被捕获并转发到 Pico。<br>
+      ③ 退出：默认<b>单击 Esc</b>即可退出；关闭「单击 Esc 退出」开关后需<b>长按 Esc</b>。<br>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // ===========================================================================
+    // 协议常量 —— 对齐 pio_device_protocol.py
+    // ===========================================================================
+    const VID = 0x2E8A, PID = 0xC9D0;
+    const H0 = 0x55, H1 = 0xAA, REPORT_SIZE = 64, REPORT_ID = 0;
+
+    const CMD_CORE_INPUT = 0xFC;
+    const SUB_MOUSE_MOVE = 0xFF;
+    const SUB_MOUSE_BUTTON = 0xFE;
+    const SUB_KBD_MOD = 0xFD;
+    const SUB_KBD_KEY = 0xFC;
+    const SUB_ORIENTATION = 0xFB;
+    const EVT_ORIENTATION = 0x01;
+    const CMD_LUA = 0xFA;    // payload → Lua on_custom_event(str)
+
+    const MAX_DELTA = 127;
+
+    // ===========================================================================
+    // 帧构造
+    // ===========================================================================
+    const txBuf = new Uint8Array(REPORT_SIZE);
+    txBuf[0] = H0; txBuf[1] = H1; txBuf[3] = CMD_CORE_INPUT;
+    const luaBuf = new Uint8Array(REPORT_SIZE);   // Lua 发送用独立 buffer，不与 txBuf 互斥
+
+    function beginFrame(payloadLen) {
+      txBuf.fill(0, 4, 20);
+      txBuf[2] = 1 + payloadLen;
+    }
+    function putI32(off, v) {
+      txBuf[off] = v & 0xFF;
+      txBuf[off + 1] = (v >> 8) & 0xFF;
+      txBuf[off + 2] = (v >> 16) & 0xFF;
+      txBuf[off + 3] = (v >> 24) & 0xFF;
+    }
+    function buildMouseMove(dx, dy, wheel) {
+      beginFrame(13);
+      txBuf[4] = SUB_MOUSE_MOVE;
+      putI32(5, dx); putI32(9, dy); putI32(13, wheel);
+    }
+    function buildTriple(sub, a, b) {
+      beginFrame(3);
+      txBuf[4] = sub; txBuf[5] = a; txBuf[6] = b;
+    }
+    async function sendLua() {
+      if (!device || !device.opened) return;
+      const text = $('lua-input').value.trim();
+      if (!text) return;
+      const enc = new TextEncoder();
+      const bytes = enc.encode(text);
+      const maxLen = REPORT_SIZE - 4;   // 64 - 4B 帧头
+      const payload = bytes.slice(0, maxLen);
+      luaBuf.fill(0);
+      luaBuf[0] = H0; luaBuf[1] = H1;
+      luaBuf[2] = 1 + payload.length;  // LEN = CMD(1) + payload
+      luaBuf[3] = CMD_LUA;
+      luaBuf.set(payload, 4);
+      try {
+        await device.sendReport(REPORT_ID, luaBuf);
+        $('lua-input').value = '';
+        $('lua-st').textContent = '已发送';
+        $('lua-st').className = 'v ok';
+        setTimeout(() => { $('lua-st').textContent = '—'; }, 2000);
+      } catch (err) {
+        $('lua-st').textContent = 'ERR: ' + err.message;
+        $('lua-st').className = 'v bad';
+      }
+    }
+
+    // ===========================================================================
+    // 发送泵
+    // ===========================================================================
+    let device = null;
+
+    let pendDX = 0, pendDY = 0, pendWheel = 0;
+    const discreteQ = [];
+    let pumping = false;
+
+    let stOut = 0, stIn = 0, stErr = 0, stInflight = 0;
+    let stRttSum = 0, stRttN = 0, stRttMax = 0;
+    let stCorrSum = 0;
+
+    async function flush() {
+      if (pumping || !device || !device.opened) return;
+      pumping = true;
+      try {
+        while (device && device.opened) {
+          if (discreteQ.length) {
+            const [sub, a, b] = discreteQ.shift();
+            buildTriple(sub, a, b);
+          } else if (pendDX || pendDY || pendWheel) {
+            const dx = clampTake('x'), dy = clampTake('y');
+            const w = pendWheel; pendWheel = 0;
+            buildMouseMove(dx, dy, w);
+          } else {
+            break;
+          }
+
+          const t = performance.now();
+          stInflight = 1;
+          await device.sendReport(REPORT_ID, txBuf);
+          stInflight = 0;
+
+          const rtt = performance.now() - t;
+          stRttSum += rtt; stRttN++;
+          if (rtt > stRttMax) stRttMax = rtt;
+          stOut++;
+        }
+      } catch (err) {
+        stInflight = 0;
+        stErr++;
+        console.error('sendReport 失败:', err);
+      } finally {
+        pumping = false;
+      }
+    }
+
+    function clampTake(axis) {
+      const v = axis === 'x' ? pendDX : pendDY;
+      const out = v > MAX_DELTA ? MAX_DELTA : v < -MAX_DELTA ? -MAX_DELTA : v;
+      if (axis === 'x') pendDX -= out; else pendDY -= out;
+      return out;
+    }
+
+    function postMove(dx, dy) {
+      pendDX += dx; pendDY += dy;
+      flush();
+    }
+    function postWheel(ticks) {
+      pendWheel += ticks;
+      flush();
+    }
+    function postDiscrete(sub, a, b) {
+      discreteQ.push([sub, a, b]);
+      flush();
+    }
+
+    // ===========================================================================
+    // 鼠标位移采集
+    // ===========================================================================
+    let grabbed = false;
+    let rawSeen = false;
+
+    let semMode = 'delta';
+    let semLocked = false;
+    let semFrames = 0, semAccSum = 0, semAccLast = 0, semAccTruth = 0;
+
+    let fRawSumX = 0, fRawSumY = 0;
+    let fRawLastX = 0, fRawLastY = 0;
+    let fRawN = 0;
+    let fPrevCumX = 0, fPrevCumY = 0;
+    let fEmitX = 0, fEmitY = 0;
+
+    document.addEventListener('pointerrawupdate', (e) => {
+      if (!grabbed || !device || !device.opened) return;
+      if (!rawSeen) { rawSeen = true; renderStatic(); }
+      stIn++;
+
+      const mx = e.movementX, my = e.movementY;
+
+      let dx, dy;
+      if (semMode === 'cumulative') {
+        dx = mx - fPrevCumX; dy = my - fPrevCumY;
+        fPrevCumX = mx; fPrevCumY = my;
+      } else {
+        dx = mx; dy = my;
+      }
+
+      fRawSumX += mx; fRawSumY += my;
+      fRawLastX = mx; fRawLastY = my;
+      fRawN++;
+
+      if (dx || dy) {
+        fEmitX += dx; fEmitY += dy;
+        postMove(dx, dy);
+      }
+    });
+
+    document.addEventListener('pointermove', (e) => {
+      if (!grabbed || !device || !device.opened) { resetFrame(); return; }
+      if (!rawSeen) stIn++;
+
+      const truthX = e.movementX, truthY = e.movementY;
+
+      const corrX = truthX - fEmitX;
+      const corrY = truthY - fEmitY;
+      if (corrX || corrY) {
+        stCorrSum += Math.abs(corrX) + Math.abs(corrY);
+        postMove(corrX, corrY);
+      }
+
+      if (!semLocked && fRawN >= 2 && Math.abs(truthX) + Math.abs(truthY) > 2) {
+        semAccSum += Math.abs(fRawSumX) + Math.abs(fRawSumY);
+        semAccLast += Math.abs(fRawLastX) + Math.abs(fRawLastY);
+        semAccTruth += Math.abs(truthX) + Math.abs(truthY);
+        if (++semFrames >= 20) {
+          const errDelta = Math.abs(semAccSum - semAccTruth);
+          const errCumul = Math.abs(semAccLast - semAccTruth);
+          semMode = errCumul < errDelta ? 'cumulative' : 'delta';
+          semLocked = true;
+          renderStatic();
+        }
+      }
+
+      resetFrame();
+    });
+
+    function resetFrame() {
+      fRawSumX = fRawSumY = 0;
+      fRawLastX = fRawLastY = 0;
+      fRawN = 0;
+      fPrevCumX = fPrevCumY = 0;
+      fEmitX = fEmitY = 0;
+    }
+
+    // ===========================================================================
+    // 按键 / 鼠标键 / 滚轮
+    // ===========================================================================
+    const KEY_TO_HID = {
+      KeyA: 4, KeyB: 5, KeyC: 6, KeyD: 7, KeyE: 8, KeyF: 9, KeyG: 10, KeyH: 11, KeyI: 12, KeyJ: 13,
+      KeyK: 14, KeyL: 15, KeyM: 16, KeyN: 17, KeyO: 18, KeyP: 19, KeyQ: 20, KeyR: 21, KeyS: 22,
+      KeyT: 23, KeyU: 24, KeyV: 25, KeyW: 26, KeyX: 27, KeyY: 28, KeyZ: 29,
+      Digit1: 30, Digit2: 31, Digit3: 32, Digit4: 33, Digit5: 34,
+      Digit6: 35, Digit7: 36, Digit8: 37, Digit9: 38, Digit0: 39,
+      Enter: 40, Escape: 41, Backspace: 42, Tab: 43, Space: 44,
+      Minus: 45, Equal: 46, BracketLeft: 47, BracketRight: 48, Backslash: 49,
+      Semicolon: 51, Quote: 52, Backquote: 53, Comma: 54, Period: 55, Slash: 56, CapsLock: 57,
+      F1: 58, F2: 59, F3: 60, F4: 61, F5: 62, F6: 63, F7: 64, F8: 65, F9: 66, F10: 67, F11: 68, F12: 69,
+      PrintScreen: 70, ScrollLock: 71, Pause: 72,
+      Insert: 73, Home: 74, PageUp: 75, Delete: 76, End: 77, PageDown: 78,
+      ArrowRight: 79, ArrowLeft: 80, ArrowDown: 81, ArrowUp: 82, NumLock: 83,
+      NumpadDivide: 84, NumpadMultiply: 85, NumpadSubtract: 86, NumpadAdd: 87, NumpadEnter: 88,
+      Numpad1: 89, Numpad2: 90, Numpad3: 91, Numpad4: 92, Numpad5: 93,
+      Numpad6: 94, Numpad7: 95, Numpad8: 96, Numpad9: 97, Numpad0: 98, NumpadDecimal: 99,
+      IntlBackslash: 100, ContextMenu: 101,
+      // 修饰键（HID keycode 0xE0-0xE7）
+      ControlLeft: 0xE0, ShiftLeft: 0xE1, AltLeft: 0xE2, MetaLeft: 0xE3,
+      ControlRight: 0xE4, ShiftRight: 0xE5, AltRight: 0xE6, MetaRight: 0xE7,
+    };
+    const MOUSE_BTN_HID = { 0: 0, 1: 2, 2: 1, 3: 3, 4: 4 };
+
+    const heldKeys = new Set();
+    const heldBtns = new Set();
+
+    document.addEventListener('keydown', (e) => {
+      if (!grabbed || !device || !device.opened) return;
+      e.preventDefault();
+      if (e.repeat) return;
+
+      if (e.code === 'Escape') {
+        if (!kbdLocked || $('opt-esc-single').checked) { releaseGrab(); return; }
+      }
+
+      stIn++;
+      const hid = KEY_TO_HID[e.code];
+      if (hid !== undefined) { heldKeys.add(hid); postDiscrete(SUB_KBD_KEY, hid, 1); }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (!grabbed || !device || !device.opened) return;
+      e.preventDefault();
+      if (e.code === 'Escape') { if (!kbdLocked || $('opt-esc-single').checked) return; }
+
+      stIn++;
+      const hid = KEY_TO_HID[e.code];
+      if (hid !== undefined) { heldKeys.delete(hid); postDiscrete(SUB_KBD_KEY, hid, 0); }
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      if (!grabbed || !device || !device.opened) return;
+      e.preventDefault();
+      const hid = MOUSE_BTN_HID[e.button];
+      if (hid === undefined) return;
+      stIn++;
+      heldBtns.add(hid);
+      postDiscrete(SUB_MOUSE_BUTTON, hid, 1);
+    });
+
+    document.addEventListener('mouseup', (e) => {
+      if (!grabbed || !device || !device.opened) return;
+      e.preventDefault();
+      const hid = MOUSE_BTN_HID[e.button];
+      if (hid === undefined) return;
+      stIn++;
+      heldBtns.delete(hid);
+      postDiscrete(SUB_MOUSE_BUTTON, hid, 0);
+    });
+
+    // ✅ 修改点：移除 passive:true，改为 passive:false，并调用 preventDefault()
+    document.addEventListener('wheel', (e) => {
+      if (!grabbed || !device || !device.opened) return;
+      e.preventDefault();                      // 阻止缩放等默认行为
+      if (e.deltaY === 0) return;
+      stIn++;
+      // 如需区分 Ctrl+滚轮，可在此判断 e.ctrlKey
+      // if (e.ctrlKey) { /* 特殊处理 */ }
+      postWheel(e.deltaY > 0 ? -1 : 1);
+    }, { passive: false });                    // ✅ 改为 false
+
+    document.addEventListener('contextmenu', (e) => { if (grabbed) e.preventDefault(); });
+
+    function releaseAllHeld() {
+      for (const b of heldBtns) postDiscrete(SUB_MOUSE_BUTTON, b, 0);
+      for (const k of heldKeys) postDiscrete(SUB_KBD_KEY, k, 0);
+      heldBtns.clear(); heldKeys.clear();
+    }
+
+    // ===========================================================================
+    // 独占
+    // ===========================================================================
+    let unadjusted = false;
+    let kbdLocked = false;
+
+    const $ = (id) => document.getElementById(id);
+
+    async function acquireGrab() {
+      if (!device || !device.opened) return;
+
+      if ($('opt-kbd').checked) {
+        try {
+          await document.documentElement.requestFullscreen();
+          await navigator.keyboard.lock();
+          kbdLocked = true;
+        } catch (err) {
+          kbdLocked = false;
+          console.warn('Keyboard Lock 不可用，退回普通模式:', err);
+        }
+      }
+
+      try {
+        if ($('opt-unadj').checked) {
+          await document.body.requestPointerLock({ unadjustedMovement: true });
+          unadjusted = true;
+        } else {
+          await document.body.requestPointerLock();
+          unadjusted = false;
+        }
+      } catch (err) {
+        console.warn('unadjustedMovement 不支持，退回普通 pointer lock:', err);
+        unadjusted = false;
+        try { await document.body.requestPointerLock(); } catch (e2) { console.error(e2); }
+      }
+    }
+
+    function releaseGrab() {
+      document.exitPointerLock();
+      if (kbdLocked) { navigator.keyboard.unlock(); kbdLocked = false; }
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
+    }
+
+    document.addEventListener('pointerlockchange', () => {
+      const now = document.pointerLockElement === document.body;
+      if (grabbed && !now) {
+        releaseAllHeld();
+        if (kbdLocked) { navigator.keyboard.unlock(); kbdLocked = false; }
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
+      }
+      grabbed = now;
+      document.body.classList.toggle('grabbed', grabbed);
+      if (grabbed) { resetFrame(); resetStats(); }
+      renderStatic();
+    });
+
+    $('btn-grab').onclick = () => (grabbed ? releaseGrab() : acquireGrab());
+
+    // ===========================================================================
+    // WebHID
+    // ===========================================================================
+    let orient = 0;
+
+    function parseInput(dv) {
+      const len = dv.byteLength;
+      let i = 0;
+      while (i < len - 3) {
+        if (dv.getUint8(i) === H0 && dv.getUint8(i + 1) === H1) {
+          const L = dv.getUint8(i + 2);
+          if (L >= 1 && i + 3 + L <= len) {
+            const evt = dv.getUint8(i + 3);
+            if (evt === EVT_ORIENTATION && L >= 2) { orient = dv.getUint8(i + 4); renderStatic(); }
+            i += 3 + L;
+            continue;
+          }
+        }
+        i++;
+      }
+    }
+
+    // 连接建立：打开设备并挂载 inputreport 回调。
+    // 用 oninputreport 属性而非 addEventListener，重复 attach 同一对象也不会叠加监听。
+    async function attachDevice(dev) {
+      if (!dev.opened) await dev.open();
+      dev.oninputreport = (e) => parseInput(e.data);
+      device = dev;
+      clearPipeline();
+      renderStatic();
+    }
+
+    // 断开清理：丢弃发送管线里的残留数据，避免下次连接时误发旧队列。
+    function clearPipeline() {
+      pendDX = pendDY = pendWheel = 0;
+      discreteQ.length = 0;
+      heldBtns.clear(); heldKeys.clear();
+    }
+
+    function detachDevice() {
+      if (grabbed) releaseGrab();
+      if (device) {
+        device.oninputreport = null;
+        device.close().catch(() => { });
+      }
+      device = null;
+      clearPipeline();
+      renderStatic();
+    }
+
+    // WebHID 的 connect/disconnect 事件派发在 navigator.hid 上（HIDDevice 自身没有这些事件）。
+    // 拔出：清理状态解锁「连接 HID」按钮；插回：权限已持久化，自动重连。
+    navigator.hid && navigator.hid.addEventListener('disconnect', (e) => {
+      if (e.device === device) {
+        detachDevice();
+        $('d-st').textContent = '设备已拔出';
+      }
+    });
+
+    navigator.hid && navigator.hid.addEventListener('connect', async (e) => {
+      if (device) return;
+      const dev = e.device;
+      if (dev.vendorId !== VID || dev.productId !== PID) return;
+      try {
+        await attachDevice(dev);
+        $('d-st').textContent = '已连接（自动重连）';
+      } catch (err) {
+        console.error('自动重连失败:', err);
+      }
+    });
+
+    $('btn-conn').onclick = async () => {
+      try {
+        const known = await navigator.hid.getDevices();
+        let dev = known.find(d => d.vendorId === VID && d.productId === PID);
+        if (!dev) {
+          [dev] = await navigator.hid.requestDevice({ filters: [{ vendorId: VID, productId: PID }] });
+        }
+        if (!dev) return;
+        await attachDevice(dev);
+      } catch (err) {
+        console.error('连接失败:', err);
+        $('d-st').textContent = 'ERR: ' + err.message;
+        $('d-st').className = 'v bad';
+      }
+    };
+
+    $('btn-disc').onclick = () => detachDevice();
+
+    $('lua-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendLua(); });
+
+    window.addEventListener('beforeunload', () => { if (device) device.close(); });
+
+    // ===========================================================================
+    // UI
+    // ===========================================================================
+    function resetStats() {
+      stOut = stIn = stErr = 0;
+      stRttSum = stRttN = stRttMax = 0;
+      stCorrSum = 0;
+      statT0 = performance.now();
+    }
+    let statT0 = performance.now();
+
+    function renderStatic() {
+      const on = !!(device && device.opened);
+      $('d-st').textContent = on ? '已连接' : '未连接';
+      $('d-st').className = 'v ' + (on ? 'ok' : 'bad');
+      $('d-or').textContent = on ? orient : '—';
+      $('btn-conn').disabled = on;
+      $('btn-disc').disabled = !on;
+      $('btn-grab').disabled = !on;
+      $('btn-lua-send').disabled = !on;
+      $('btn-grab').textContent = grabbed ? '退出独占' : '开始独占';
+      $('btn-grab').classList.toggle('primary', !grabbed);
+
+      $('c-grab').textContent = grabbed ? 'on' : 'off';
+      $('c-grab').className = 'v ' + (grabbed ? 'ok' : '');
+
+      if (!grabbed) {
+        $('c-src').textContent = '—'; $('c-src').className = 'v';
+        $('c-sem').textContent = '—'; $('c-sem').className = 'v';
+        $('c-unadj').textContent = '—'; $('c-unadj').className = 'v';
+        $('c-kbd').textContent = '—'; $('c-kbd').className = 'v';
+        return;
+      }
+      $('c-src').textContent = rawSeen ? 'pointerrawupdate（原生轮询率）' : 'pointermove（帧率）';
+      $('c-src').className = 'v ' + (rawSeen ? 'ok' : 'warn');
+      $('c-sem').textContent = semLocked ? semMode + '（已标定）' : semMode + '（标定中…）';
+      $('c-sem').className = 'v ' + (semLocked ? 'ok' : 'warn');
+      $('c-unadj').textContent = unadjusted ? 'YES' : 'NO（受系统加速影响）';
+      $('c-unadj').className = 'v ' + (unadjusted ? 'ok' : 'warn');
+      $('c-kbd').textContent = kbdLocked ? 'YES（长按 Esc 退出）' : 'NO（Esc 退出）';
+      $('c-kbd').className = 'v ' + (kbdLocked ? 'ok' : 'warn');
+    }
+
+    setInterval(() => {
+      const dt = (performance.now() - statT0) / 1000;
+      if (dt < 0.2) return;
+
+      const inHz = stIn / dt;
+      const outHz = stOut / dt;
+      $('p-in').textContent = inHz.toFixed(0) + ' Hz';
+      $('p-out').textContent = outHz.toFixed(0) + ' Hz';
+
+      if (stRttN) {
+        const avg = stRttSum / stRttN;
+        $('p-rtt').textContent = avg.toFixed(2) + ' ms（峰值 ' + stRttMax.toFixed(1) + ' ms）';
+        $('p-rtt').className = 'v ' + (avg < 1.5 ? 'ok' : avg < 4 ? 'warn' : 'bad');
+      }
+      $('p-inflight').textContent = stInflight + ' / 1';
+      $('p-inflight').className = 'v ok';
+
+      $('p-merge').textContent = stOut ? (stIn / stOut).toFixed(2) + ' : 1' : '—';
+      $('p-corr').textContent = stCorrSum.toFixed(0) + ' px（越接近0，raw估计越准）';
+      $('p-err').textContent = stErr;
+      $('p-err').className = 'v ' + (stErr ? 'bad' : 'ok');
+
+      if (dt > 1) resetStats();
+    }, 250);
+
+    if (!navigator.hid) {
+      $('d-st').textContent = 'WebHID 不可用';
+      $('btn-conn').disabled = true;
+      $('hint').innerHTML = '<b>WebHID 不可用。</b>需要 Chrome/Edge 89+ 且运行在 secure context（HTTPS 或 localhost）。';
+    } else {
+      renderStatic();
+    }
+  </script>
+</body>
+
+</html>

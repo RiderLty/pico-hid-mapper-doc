@@ -1,0 +1,14 @@
+{
+  "name": "pico-hid-mapper-doc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "pico-hid-mapper 使用文档",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.3"
+  }
+}
