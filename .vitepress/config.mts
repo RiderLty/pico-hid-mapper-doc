@@ -14,11 +14,10 @@ export default defineConfig({
   description: 'USB HID 映射器固件 — 将键鼠输入映射为触屏操作',
 
   head: [
-    ['link', { rel: 'icon', href: '/favicon.svg' }],
+    ['link', { rel: 'icon', href: '/icon.png' }],
   ],
 
   themeConfig: {
-    logo: '/favicon.svg',
 
     nav: [
       { text: '快速开始', link: '/quick-start' },

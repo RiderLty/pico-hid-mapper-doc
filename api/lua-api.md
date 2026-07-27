@@ -46,10 +46,6 @@ function on_key(keycode, down)
 end
 ```
 
-### 编辑入口
-
-Web UI → 右下角「PICO 配置」→「管理脚本」→ 代码编辑器。
-
 ---
 
 ## 事件回调

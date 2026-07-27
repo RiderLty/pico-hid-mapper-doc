@@ -4,17 +4,17 @@
 
 | 物品 | 用途 |
 |------|------|
-| **微雪 RP2350-USB-C** 开发板 | 目标板，自带双 USB-C 口 |
+| **微雪 RP2350-USB-C** 开发板 | 目标板，自带双 USB-C 口（也可使用 RP2350 开发板自行焊接） |
 | **USB 数据线** ×1–2 | 原生口连主机；PIO-USB 口接键鼠 |
-| **UF2 固件文件** | 从 [Releases](https://github.com/RiderLty/pico-hid-mapper/releases) 下载 |
+| **UF2 固件文件** | 群文件获取（[点击加群](https://qm.qq.com/cgi-bin/qm/qr?k=ADpjCCIKz79QSBBmKhr9fXjeGlEvnSUS&jump_from=webapi&authKey=l23Yp3dysdEgmHNrGUx52qHXUj36BKKZ86XfQ0AZy8D0nEXfETw1jHomeJR0ycjh)） |
 | **Android 手机** | 目标平台（本项目仅适配 Android） |
 
 可选：
 
 | 物品 | 用途 |
 |------|------|
-| USB 键盘 / 鼠标 | PIO Host 模式下接 PIO-USB-C 口 |
-| USB Hub | 同时连接多个 HID 设备 |
+| USB 键盘 / 鼠标 | PIO 切换为 Host 模式后，通过 USB Hub 接 PIO-USB-C 口 |
+| USB Hub（推荐 CH334 USB 2.0 Hub） | PIO Host 模式下扩展 USB 接口 |
 
 ## 第一步：刷入固件
 
@@ -31,21 +31,19 @@
 板子有两个 USB-C 口，各司其职：
 
 ```
-        ┌──────────────────────┐
-        │  RP2350-USB-C        │
-        │                      │
-  手机 ─│ 原生 USB-C    PIO-USB │─ 键盘/鼠标
-        │                      │  (Host 模式)
-        └──────────────────────┘
+         ┌─────────────────────────────────────┐
+         │           RP2350-USB-C              │
+         │    RST ○                 ○ CC1      │
+   手机 ─│   原生 USB-C           PIO-USB-C    │─ 上位机
+         │   BOOT ○                 ○ CC2      │
+         └─────────────────────────────────────┘
 ```
 
-1. **原生 Type-C 口** 用 USB 线连接 **手机**
-2. 手机通知栏出现「USB 以太网」→ RNDIS 网卡已识别
-3. **PIO-USB Type-C 口** 接你的键盘/鼠标（可能需要 USB-C 转 A 母座）
+1. **原生 Type-C 口**（靠近 RST、BOOT 按钮）用 USB 线连接 **手机**
+2. 部分设备可能会提示插入了 **DS5 手柄**，USB网卡（CDC）自动识别
+3. **PIO-USB Type-C 口**（靠近 CC1、CC2 电阻）默认 Device 模式，连接上位机。如需直连键鼠，在 Web UI 切换为 Host 模式后，使用扩展坞连接键鼠
 
-> 此时固件同时提供三个 USB 功能：**RNDIS 网卡**（配置）、**HID 触屏**（映射输出）、**PIO-USB Host**（读键鼠）。
-
-## 第三步：安装 vPointer（推荐）
+## 第三步：安装 vPointer（可选 / 强烈推荐）
 
 [vPointer](https://github.com/RiderLty/vpointer) 是配套的 Android 应用，提供两个核心功能：
 
@@ -54,37 +52,48 @@
 
 > **网络限制**：Pico 的 usb0 以太网只能**单向发起**到手机的连接，手机无法主动连接 Pico。如果手机需要通过 usb0 访问 Pico，需要**断开 Wi-Fi 和移动数据**，让所有流量走 usb0 网卡。vPointer 的端口转发功能可解决此问题——它会自动将 Socket 绑定到 usb0 网卡，无需手动断网。
 
-安装后打开 vPointer，切换到「端口转发」Tab，点击启动。然后手机浏览器打开 **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)** 即可访问 Pico 配置面板。
+安装后打开 vPointer，切换到「端口转发」Tab，点击启动。之后可以通过以下方式访问 Pico 配置面板：
 
-## 第四步：上传配置文件
+- **手机浏览器** — 打开 `http://127.0.0.1:8000`
+- **同局域网设备** — 打开 `http://<手机IP>:8000`（手机需保持 Wi-Fi 连接）
+
+## 第四步：配置映射
 
 Web UI 打开后：
 
-1. 点击页面上的上传区域，选择一个 **JSON 配置文件**
-2. 页面本地转换为二进制格式
-3. 点击「上传到 Pico」→ 配置写入 Flash，掉电不丢
+1. **上传游戏截图** — 作为映射参考背景，方便精确定位触屏坐标
+2. **编辑按键映射** — 按住键盘上的某个键，然后点击屏幕对应位置即可放置触摸点。支持滚轮缩放、拖拽调整
+3. 确认无误后点击「更新」保存到 Pico
 
-> JSON 配置格式说明见 [文档](/api/#配置格式)。固件自带默认配置，可直接使用。
+## 第五步：使用上位机控制 / 直连键鼠
 
-## 第五步：开始使用
+PIO 口支持两种控制方式：
+
+1. **上位机控制（默认 Device 模式）** — 上位机打开 **[WebHID 工具](/webhid/index.html)**（Chrome / Edge），连接 Pico 后通过 WebHID 发送键鼠报文
+2. **直连键鼠（Host 模式）** — 在 Web UI 中将 PIO 口切换为 Host 模式，通过 USB Hub（推荐 CH334 USB 2.0 Hub）连接键盘/鼠标到 PIO-USB-C 口
+
+## 第六步：开始使用
 
 - ✅ 固件已刷入
 - ✅ 设备已连接
 - ✅ 配置已上传
 
-现在按下键盘，手机屏幕上就会有对应的触摸操作。
+一切就绪后：
 
-## 下一步
+1. 移动鼠标 → 手机屏幕上出现 **虚拟光标**（vPointer）
+2. 按下 **`` ` ``** 键（ESC 下方，`KEY_GRAVE`）→ 切换至映射模式，键鼠操作开始生效
 
-- 了解 [HIDAPI](/api/hid-api) 通过 HID 协议控制设备
-- 学习 [Lua 脚本](/api/lua-api) 编写自定义宏
-- 使用 [WebHID 工具](/webhid) 调试设备
+## 进阶
+
+- 了解 [HIDAPI](/api/hid-api)，可自行编码实现自定义上位机控制设备
+- 学习 [Lua 脚本](/api/lua-api) 编写自定义宏，实现压枪、连招、一键丢弃等高级功能
+- 通过 [WebSocket API](/api/ws-api) 或 [HIDAPI](/api/hid-api#cmd-0xfa-自定义事件) 向 Lua 发送自定义指令，实现外部程序联动
 
 ## 常见问题
 
 | 问题 | 解决 |
 |------|------|
-| RNDIS 网卡未识别 | 换一根数据线（确保支持数据传输），或换一个 USB 口 |
-| 无法访问 192.168.73.1 | 检查手机是否识别到 RNDIS 网卡，确保 vPointer 端口转发已启动 |
-| 键鼠按下无反应 | 检查 PIO 口是否为 Host 模式（Web UI → PICO 配置） |
+| 设备未识别 | 换一根 USB 2.0 数据线 |
+| 无法访问 192.168.73.1 | 检查手机是否识别到 USB网卡，确保 vPointer 端口转发已启动 |
+| 键鼠按下无反应 | PIO 口默认 Device 模式，需在 Web UI 切换为 Host 模式，并通过 USB Hub 连接键鼠 |
 | 配置上传失败 | 检查 JSON 格式是否正确；查看 WebSocket 日志 |

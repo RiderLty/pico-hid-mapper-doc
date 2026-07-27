@@ -10,6 +10,12 @@
   --vp-c-brand-3: #2563eb;
 }
 
+/* 首页 hero 图片 */
+.VPHero .image img {
+  max-width: 256px;
+  border-radius: 16px;
+}
+
 /* 首页 hero */
 .VPHero .name {
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
@@ -23,10 +29,15 @@
   font-size: 24px;
 }
 
+/* 代码块等宽字体，避免中文混排偏移 */
+code, pre, kbd {
+  font-family: "Sarasa Mono SC", "Noto Sans Mono CJK SC", "Source Code Pro", "Cascadia Code", monospace;
+}
+
 /* WebHID 工具 iframe */
 .webhid-frame {
   width: 100%;
-  height: 850px;
+  height:870px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 8px;
 }
