@@ -1,7 +1,5 @@
 # 快速开始
 
-本指南面向**只有 UF2 固件文件、不接触源码**的用户。从刷机到可用，只需几分钟。
-
 ## 你需要准备
 
 | 物品 | 用途 |
@@ -47,37 +45,16 @@
 
 > 此时固件同时提供三个 USB 功能：**RNDIS 网卡**（配置）、**HID 触屏**（映射输出）、**PIO-USB Host**（读键鼠）。
 
-## 第三步：打开 Web 配置面板
+## 第三步：安装 vPointer（推荐）
 
-1. 手机连接 Pico 后，系统自动识别 RNDIS 网卡
-2. Pico 的 IP 固定为 **`192.168.73.1`**
+[vPointer](https://github.com/RiderLty/vpointer) 是配套的 Android 应用，提供两个核心功能：
 
-### Android 手机访问
+- **虚拟光标** — 在手机屏幕上显示鼠标光标，通过 TCP/UDP 接收 Pico 发送的光标坐标
+- **端口转发** — 将 Pico 的 Web 配置面板（`192.168.73.1:80`）转发到手机本地端口，浏览器即可访问
 
-Android 限制应用直接访问 RNDIS 网段。需要通过端口转发：
+> **网络限制**：Pico 的 usb0 以太网只能**单向发起**到手机的连接，手机无法主动连接 Pico。如果手机需要通过 usb0 访问 Pico，需要**断开 Wi-Fi 和移动数据**，让所有流量走 usb0 网卡。vPointer 的端口转发功能可解决此问题——它会自动将 Socket 绑定到 usb0 网卡，无需手动断网。
 
-**方法一：ADB + socat（推荐）**
-
-```bash
-# 首次：下载 socat 到手机
-adb push socat /data/local/tmp/socat
-adb shell chmod +x /data/local/tmp/socat
-
-# 转发 Pico 80 → 手机 127.0.0.1:8000
-adb shell /data/local/tmp/socat tcp-listen:8000,bind=127.0.0.1,reuseaddr,fork tcp:192.168.73.1:80
-```
-
-然后手机浏览器打开 **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)**。
-
-**方法二：一键脚本**
-
-```bash
-curl https://1833788059.cdn.123clouddisk.com/1833788059/direct/socat.sh | sh
-```
-
-### 电脑直接访问
-
-电脑连接 Pico 后，直接在浏览器打开 **[http://192.168.73.1/](http://192.168.73.1/)**。
+安装后打开 vPointer，切换到「端口转发」Tab，点击启动。然后手机浏览器打开 **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)** 即可访问 Pico 配置面板。
 
 ## 第四步：上传配置文件
 
@@ -87,7 +64,7 @@ Web UI 打开后：
 2. 页面本地转换为二进制格式
 3. 点击「上传到 Pico」→ 配置写入 Flash，掉电不丢
 
-> JSON 配置格式说明见 [API 文档](/api/#配置格式)。固件自带默认配置，可直接使用。
+> JSON 配置格式说明见 [文档](/api/#配置格式)。固件自带默认配置，可直接使用。
 
 ## 第五步：开始使用
 
@@ -99,7 +76,7 @@ Web UI 打开后：
 
 ## 下一步
 
-- 了解 [HTTP API](/api/http-api) 进行自动化控制
+- 了解 [HIDAPI](/api/hid-api) 通过 HID 协议控制设备
 - 学习 [Lua 脚本](/api/lua-api) 编写自定义宏
 - 使用 [WebHID 工具](/webhid) 调试设备
 
@@ -108,6 +85,6 @@ Web UI 打开后：
 | 问题 | 解决 |
 |------|------|
 | RNDIS 网卡未识别 | 换一根数据线（确保支持数据传输），或换一个 USB 口 |
-| 无法访问 192.168.73.1 | 检查手机是否识别到 RNDIS 网卡；Android 需端口转发 |
+| 无法访问 192.168.73.1 | 检查手机是否识别到 RNDIS 网卡，确保 vPointer 端口转发已启动 |
 | 键鼠按下无反应 | 检查 PIO 口是否为 Host 模式（Web UI → PICO 配置） |
 | 配置上传失败 | 检查 JSON 格式是否正确；查看 WebSocket 日志 |

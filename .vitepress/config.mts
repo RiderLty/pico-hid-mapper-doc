@@ -21,18 +21,20 @@ export default defineConfig({
 
     nav: [
       { text: '快速开始', link: '/quick-start' },
-      { text: 'API 文档', link: '/api/' },
+      { text: '文档', link: '/api/' },
       { text: 'WebHID 工具', link: '/webhid' },
     ],
 
     sidebar: {
       '/api/': [
         {
-          text: 'API 文档',
+          text: '文档',
           items: [
             { text: '总览', link: '/api/' },
-            { text: 'HTTP API 参考', link: '/api/http-api' },
+            { text: 'HIDAPI', link: '/api/hid-api' },
+            { text: 'WebSocket API', link: '/api/ws-api' },
             { text: 'Lua 脚本 API', link: '/api/lua-api' },
+            { text: 'HID 键码参考', link: '/api/hid-code' },
           ],
         },
       ],

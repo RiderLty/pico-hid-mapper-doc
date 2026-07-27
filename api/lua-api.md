@@ -307,4 +307,4 @@ end
 | LCtrl | `0xE0` |
 | LAlt | `0xE2` |
 
-> 完整键码表参考 [HID Usage Tables](https://www.usb.org/sites/default/files/documents/hut1_12v2.pdf) 第 10 章 Keyboard/Keypad Page (0x07)。
+> 完整键码表见 [HID 键码参考](/api/hid-code)。

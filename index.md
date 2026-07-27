@@ -13,7 +13,7 @@ hero:
       text: 快速开始
       link: /quick-start
     - theme: alt
-      text: API 文档
+      text: 文档
       link: /api/
 
 features:
@@ -31,7 +31,7 @@ features:
     details: 内置 Lua 5.4.6 解释器，支持按键宏、连点、时序序列、自定义事件，比静态配置更灵活。
   - icon: 📱
     title: Android 适配
-    details: RNDIS 虚拟网卡免驱，手机直连自动分配 IP。搭配 socat 端口转发，浏览器访问 Web UI。
+    details: RNDIS 虚拟网卡免驱，手机直连自动分配 IP。搭配 vPointer 端口转发，浏览器访问 Web UI。
   - icon: 💾
     title: 持久化存储
     details: 配置写入 Flash KV-store，掉电不丢失。支持 9 个配置槽位，一键切换不同游戏方案。
