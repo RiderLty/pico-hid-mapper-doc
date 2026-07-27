@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   lang: 'zh-CN',
   title: 'pico-hid-mapper',
+  outDir: 'docs/.vitepress/dist',
 
   vite: {
     server: {
