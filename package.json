@@ -5,7 +5,9 @@
   "description": "pico-hid-mapper 使用文档",
   "scripts": {
     "dev": "vitepress dev",
-    "build": "vitepress build",
+    "build": "vitepress build && node scripts/cdn-postbuild.mjs",
+    "build:no-cdn": "vitepress build",
+    "deploy:cdn": "bash scripts/deploy-cdn.sh",
     "preview": "vitepress preview"
   },
   "devDependencies": {

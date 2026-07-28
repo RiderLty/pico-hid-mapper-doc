@@ -11,7 +11,7 @@ export default defineConfig({
       port: 5174,
     },
   },
-  description: 'USB HID 映射器固件 — 将键鼠输入映射为触屏操作',
+  description: 'USB HID 映射器 — 将键鼠输入映射为触屏操作',
 
   head: [
     ['link', { rel: 'icon', href: '/icon.png' }],
