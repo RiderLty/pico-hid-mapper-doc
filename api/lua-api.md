@@ -1,6 +1,8 @@
 # Lua 脚本 API
 
-pico-hid-mapper 内置 **Lua 5.4.6** 解释器，让你用脚本自定义按键行为。
+pico-hid-mapper 内置 **Lua 5.4.6** 解释器，让你用脚本自定义按键/鼠标行为。典型用途：压枪宏、连招宏、一键丢弃、自动化脚本等。
+
+---
 
 ## 数据流
 
@@ -24,283 +26,607 @@ Lua 引擎 (bitmap 过滤: 只有你声明监听的键/事件才进入 Lua VM)
 触摸事件队列 → USB HID 触屏 → 上位机 (手机/电脑)
 ```
 
-> 关键：脚本运行在输入的热路径上。返回 `true` 会"吃掉"事件（core 不做默认处理），返回 `false` 则原样放行。
+外部文本输入路径（均可触发 `on_custom_event(str)`）：
+
+```
+Web 前端 / LuaEditorDialog → WebSocket CMD 0x01 → ws_ipc → lua_binder_on_custom_event
+webctrl WebHID 工具         → HID OUT CMD 0xFA    → pio_device → lua_binder_on_custom_event
+```
+
+> 关键：脚本运行在输入热路径上，返回 `true` 会"吃掉"事件让 core 不再做默认处理，返回 `false` 则原样放行。
+> 对 `on_mouse_move`/`on_mouse_wheel` 而言，"拦截" = 把位移量(dx/dy 或 wheel) **清零**后再交给 core。
 
 ---
 
-## 脚本基础
+## 脚本模板
 
-### 一个最简单的脚本
-
-让 **P 键** 点击屏幕中心：
+脚本是普通 Lua 源码。你**按需定义**入口函数（都是可选项），并在顶层用 `enable_listen_*` **声明你关心哪些事件**：
 
 ```lua
-enable_listen_keys(0x13)          -- 0x13 = P 键 HID 键码
+-- 顶层: 声明要监听的键/鼠标按钮/移动/滚轮 (不声明 → 对应回调永远不触发)
+enable_listen_keys(0x13, 0x1E)              -- 监听 KEY_P、KEY_1 (HID 键码)
+enable_listen_mouse_btn(0, 1)               -- 监听鼠标左键(0)、右键(1)
+-- enable_listen_mouse_move()               -- 监听鼠标相对移动
+-- enable_listen_mouse_wheel()              -- 监听鼠标滚轮
 
+-- 脚本加载/重载时 & 配置/槽位变更时被调用: 在此缓存慢速值
+function init()
+    scale_x, scale_y = get_scale()
+    view_speed_x, view_speed_y = get_view_speed()
+end
+
+-- 按键事件 (仅按下/松开边沿, 无重复)。return true = 拦截, false = 放行
 function on_key(keycode, down)
     if keycode == 0x13 and down then
-        local id = touch_down(0x3FFFFFFF, 0x3FFFFFFF)  -- 屏幕中心按下
-        touch_up(id)                                    -- 抬起
+        local id = touch_down(0x3FFFFFFF, 0x3FFFFFFF)  -- 点屏幕中心
+        touch_up(id)
     end
-    return true   -- 拦截，不让 core 再做默认处理
+    return true
 end
-```
 
----
-
-## 事件回调
-
-### on_key(keycode, down)
-
-按键事件。
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `keycode` | number | HID 键码 |
-| `down` | boolean | true=按下, false=松开 |
-
-```lua
-function on_key(keycode, down)
-    if keycode == 0x04 and down then   -- A 键按下
-        -- 做点什么
-    end
-    return false  -- 放行给 core
+-- 鼠标按钮事件
+function on_mouse_btn(button, down)
+    return false
 end
-```
 
-### on_mouse_btn(button, down)
+-- 鼠标相对移动 (dx,dy 为本次位移像素)。return true = 拦截 (dx,dy 归零)
+function on_mouse_move(dx, dy)
+    return false
+end
 
-鼠标按钮事件。
+-- 鼠标滚轮 (wheel 为本次滚动量)。return true = 拦截 (wheel 归零)
+function on_mouse_wheel(wheel)
+    return false
+end
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `button` | number | 1=左键, 2=右键, 3=中键, 4=前进, 5=后退 |
-| `down` | boolean | true=按下, false=松开 |
+-- 周期回调 (主循环限频调用, 约 1000Hz)。dt_us = 距上次 tick 的微秒差
+function tick(dt_us)
+end
 
-### on_mouse_move(dx, dy)
-
-鼠标移动事件。
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `dx` | number | X 轴位移量 |
-| `dy` | number | Y 轴位移量 |
-
-> 返回 `true` → 位移量清零后再交给 core，效果为"吃掉"本次移动。
-
-### on_mouse_wheel(delta)
-
-鼠标滚轮事件。
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `delta` | number | 滚轮增量 |
-
-### on_custom_event(str)
-
-自定义字符串事件。来自 WebSocket 输入框或 WebHID 工具。
-
-```lua
+-- 自定义字符串事件 (来自 WebSocket / WebHID)
 function on_custom_event(str)
-    if str == "reload" then
-        -- 执行重载逻辑
-    end
+    return false
 end
 ```
 
-### tick(delta_ms)
+---
 
-定时回调，每帧调用一次。
+## 执行过程与生命周期
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `delta_ms` | number | 距上次调用的毫秒数 |
+| 时刻 | 发生什么 |
+|------|----------|
+| **脚本加载 / 上传新脚本 / 热重载** | VM 全新重建 → 顶层代码执行一次 (`listen_*` 在此生效) → 缓存入口函数 → **自动调用一次 `init()`** |
+| **收到键盘/鼠标事件 (边沿)** | core 去抖后，若该键在监听 bitmap 内 → 同步调用 `on_key`/`on_mouse_btn` |
+| **收到鼠标移动/滚轮** | 若已 `enable_listen_mouse_move`/`enable_listen_mouse_wheel` → 每次移动/滚动同步调用 (**非边沿, 连续触发**) |
+| **主循环 (限频 1ms, core1)** | 调用 `tick(dt_us)` (约 **1000Hz**) |
+| **切换配置槽位 / 下发新配置** | 慢速值 (scale/view_speed) 重算 → **再次调用 `init()`** (VM 不重建, 全局保留) |
 
-> 用于实现连点 (autofire)、时序宏 (协程 + 调度器)。
+要点：
+
+- `init()` 是 "(重新)缓存慢速值" 的统一钩子。**把 `get_scale`/`get_view_speed` 的结果存进全局变量**，后续在 `on_key`/`tick` 里直接读全局 (最快)。
+- 热重载 (上传新脚本) = VM 重建，所有全局/状态清空后重新跑。
+- `on_key`/`on_mouse_btn` **只在边沿触发** (按一次、松一次)，不会按住反复触发。想 "按住期间持续动作"，用 `tick` + 一个 `down` 标志。
+- `on_mouse_move`/`on_mouse_wheel` **不是边沿**：只要有移动/滚动就会触发 (可能每毫秒多次)。别在里面做重活。
 
 ---
 
-## 监听控制
+## 声明 / 解除监听
 
-### enable_listen_keys(...)
+| 函数 | 说明 |
+|------|------|
+| `enable_listen_keys(code1, code2, ...)` | 声明 `on_key` 要接收的 HID 键码 (0x00–0xFF, 可多个)。**不声明则 `on_key` 不触发。** 可多次调用 (累加)。每次脚本重载时清空。 |
+| `disable_listen_keys(code1, ...)` | 解除对指定键码的监听 (可多个)；**无参数则清空全部键监听**。 |
+| `enable_listen_mouse_btn(btn1, btn2, ...)` | 声明 `on_mouse_btn` 要接收的鼠标按钮 (0–7)。语义同上。 |
+| `disable_listen_mouse_btn(btn1, ...)` | 解除对指定按钮的监听 (variadic)；**无参数则清空全部按钮监听**。 |
+| `enable_listen_mouse_move()` | 开启 `on_mouse_move` 监听。 |
+| `disable_listen_mouse_move()` | 关闭 `on_mouse_move` 监听。 |
+| `enable_listen_mouse_wheel()` | 开启 `on_mouse_wheel` 监听。 |
+| `disable_listen_mouse_wheel()` | 关闭 `on_mouse_wheel` 监听。 |
 
-声明要监听的键码。**只有声明了的键才会进入 Lua**，未声明的键零开销跳过。
+> 通常在顶层调用一次。`disable_*` 便于运行时 (如在某个 `on_key` 里) 临时切换是否接管鼠标。每次脚本重载时所有监听清空，需重新声明。
 
-```lua
-enable_listen_keys(0x04, 0x07, 0x13, 0x1E, 0x1F)
--- A 键、D 键、P 键、1 键、2 键
-```
+---
 
-### enable_listen_mouse_buttons(...)
+## 入口函数
 
-声明要监听的鼠标按钮。
+| 函数 | 参数 | 返回 | 触发时机 |
+|------|------|------|----------|
+| `init()` | 无 | 忽略 | 脚本重载时 + 每次配置/槽位变更时。用于缓存慢速值。 |
+| `on_key(keycode, down)` | `keycode`: HID 键码 (int); `down`: bool | `true`=拦截, `false`=放行 | 仅对 `enable_listen_keys` 声明过的键、且状态变化 (边沿) 时。 |
+| `on_mouse_btn(button, down)` | `button`: 0–7; `down`: bool | 同上 | 仅对 `enable_listen_mouse_btn` 声明过的按钮、边沿。 |
+| `on_mouse_move(dx, dy)` | `dx,dy`: 本次相对移动像素 (int, 可正可负) | `true`=拦截 (dx/dy 归零) | 已 `enable_listen_mouse_move` 且有移动时。 |
+| `on_mouse_wheel(wheel)` | `wheel`: 本次滚轮量 (int, 可正可负) | `true`=拦截 (wheel 归零) | 已 `enable_listen_mouse_wheel` 且有滚动时。 |
+| `on_custom_event(str)` | `str`: 字符串, 最大 **128 字节** (WS) / **60 字节** (HID) | `true`=拦截 | 外部通过 WebSocket (CMD 0x01) 或 HID CMD 0xFA 发送文本时触发。**无需 enable_listen**。 |
+| `tick(dt_us)` | `dt_us`: 距上次 tick 的微秒差 | 忽略 | 主循环限频调用, 约 1000Hz (1ms 一次)。 |
 
-```lua
-enable_listen_mouse_buttons(1, 2)  -- 左键、右键
-```
+**拦截语义 (重要)**：
 
-### enable_listen_mouse_move()
-
-启用鼠标移动监听（默认关闭，因调用频率极高）。
-
-### enable_listen_mouse_wheel()
-
-启用滚轮监听。
+- `on_key`/`on_mouse_btn` 返回 `true` → core 跳过对该键的**全部默认处理** (包括 Alt+F1~F9 切槽热键、鼠标切换键、WASD 轮盘、配置映射)。返回 `false` → 交回默认逻辑。
+- `on_mouse_move`/`on_mouse_wheel` 返回 `true` → core 把对应位移量清零。**移动和滚轮分开判定**: 只拦截 `on_mouse_move` 不影响同帧滚轮，反之亦然。
 
 ---
 
 ## 触摸输出
 
-### touch_down(x, y) → id
+| 函数 | 说明 |
+|------|------|
+| `id = touch_down(x, y)` | 在触摸坐标 `(x,y)` 按下一个新触点，返回触点 id (整数)。**无空闲触点时返回 `0xFF`**。 |
+| `id = touch_move(id, x, y)` | 把触点 `id` 移到 `(x,y)`，返回 id。 |
+| `touch_up(id)` | 抬起触点 `id`。 |
 
-在屏幕坐标 (x, y) 处按下，返回触点 ID。
+> 触点最多 **10** 个。用完务必 `touch_up` 释放，否则 `touch_down` 返回 `0xFF`。建议为每个按键维护独立触点 id。
+
+---
+
+## 状态 Getter
+
+| 函数 | 返回 | 冷/热 | 用法 |
+|------|------|--------|------|
+| `get_scale()` | `scale_x, scale_y` | **慢** (配置/槽位变才变) | 在 `init()` 里缓存进全局。像素→触摸缩放因子。 |
+| `get_view_speed()` | `view_speed_x, view_speed_y` | **慢** | 同上。灵敏度。 |
+| `get_vmouse()` | `x, y, show, down` | **热** (每次鼠标移动都变) | 随用随取，别缓存。`x,y` = 虚拟光标当前**屏幕像素**坐标。 |
+| `get_screen_size()` | `w, h` | **慢** | 当前配置的屏幕尺寸 (像素)。 |
+
+---
+
+## 映射开关 / 输入状态
+
+| 函数 | 返回 / 参数 | 说明 |
+|------|-------------|------|
+| `is_map_on()` | `bool` | 映射是否开启。 |
+| `set_map_on(on)` | `on`: bool | 设置映射开关。切换时自动清理触摸、复位视角/轮盘/vmouse。 |
+| `is_key_down(keycode)` | `bool` | 某键当前是否按下；支持修饰键 (0xE0–0xE7) 与普通键。持续检测建议用 `on_key` 事件而非轮询。 |
+| `is_mouse_btn_down(btn)` | `bool` | 某鼠标按键 (0–7) 当前是否按下。 |
+| `get_now_ms()` | `int32` | 开机至今毫秒 (约 24.8 天回绕)。 |
+| `get_rand_num(mini, max)` | `int32` | `[mini, max]` 闭区间随机整数。 |
+
+---
+
+## 视角 (View)
+
+坐标均为**触控坐标** (`0..TOUCH_MAX`)。
+
+| 函数 | 说明 |
+|------|------|
+| `get_view_id()` / `set_view_id(id)` | 当前视角触点 id (`0xFF` = 未触摸)。 |
+| `get_view_now_pos()` → `x, y` | 当前视角坐标。 |
+| `move_view_offset(x, y)` | 以偏移量移动视角。仅当 `map_on` 且已有视角触点时生效。 |
+| `get_view_start_pos()` / `set_view_start_pos(x, y)` | 视角起始点。 |
+| `get_view_speed()` / `set_view_speed(x, y)` | 视角控制速度 (灵敏度)。 |
+| `set_view_auto_center(on)` | 视角越界时是否回到 `start_pos`。默认 `true`。 |
+| `set_view_auto_release_timeout(ms)` | 视角触点无移动多久 (毫秒) 后自动释放；`0` = 永不自动释放。默认 `400`。 |
+
+---
+
+## 虚拟光标 (vmouse)
+
+`x,y` 为**屏幕像素**；触点 id 由内部管理，故封装为函数。
+
+| 函数 | 说明 |
+|------|------|
+| `get_vmouse_state()` → `show, down, x, y` | vmouse 状态。 |
+| `set_vmouse_show(on)` / `set_vmouse_down(on)` | 设置显示 / 按下。 |
+| `move_vmouse_pos_offset(x, y)` | 以偏移量移动 vmouse (`x,y` 为屏幕像素偏移，直接累加)。 |
+| `move_vmouse_pos_target(x, y)` | 移动 vmouse 到目标触控坐标 (内部 `/scale` 转为屏幕像素)。 |
+
+---
+
+## 轮盘 (Wheel)
+
+中心为**触控坐标**，半径为归一化 float (相对屏幕宽)。
+
+| 函数 | 返回 | 说明 |
+|------|------|------|
+| `get_wheel_start_pos()` | `x, y` | 轮盘中心坐标。 |
+| `get_wheel_range()` | `range, shift_range` | 普通半径 / shift 疾跑半径。 |
+| `get_wheel_shift_range_type()` | `enable, hold_or_click` | `enable` = 是否开启 shift 疾跑; `hold_or_click` = `true` 切换 (toggle) / `false` 按住 (hold)。 |
+
+---
+
+## 调试输出
+
+| 函数 | 说明 |
+|------|------|
+| `print(...)` | 输出到 WebSocket 调试通道，带 `[lua]` 前缀。未连接 WS 客户端时丢弃。 |
+| `warn(...)` | 同 `print`，带 `[lua warn]` 前缀。 |
+
+---
+
+## 坐标系与换算
+
+固件内部使用两套坐标体系：
+
+### 屏幕像素
+
+`get_screen_size()` 返回手机实际分辨率 (如 1080×2400)。`get_vmouse()` 返回的光标坐标也是这个坐标系 → 范围 `0..screen_w` / `0..screen_h`。
+
+### 触控坐标
+
+`touch_down/move/up`、`get_view_now_pos()` 等使用**触控坐标**: 范围 `0..0x7FFFFFFE` (记作 `TOUCH_MAX`)。无论手机分辨率多少，触控坐标范围永远不变。**屏幕正中心永远是 `0x3FFFFFFF`** (= TOUCH_MAX / 2)。
+
+### 换算
 
 ```lua
-local id = touch_down(0x3FFFFFFF, 0x3FFFFFFF)  -- 屏幕中心
+-- 像素 → 触控 (乘 scale, 最常用)
+touch_x = pixel_x * scale_x
+touch_y = pixel_y * scale_y
+
+-- 触控 → 像素 (除 scale, 少数 API 用到)
+pixel_x = touch_x / scale_x
 ```
 
-> 坐标范围 `0 ~ 0x7FFFFFFE`，32 位精度。`0x3FFFFFFF` ≈ 屏幕中心。
+`scale_x/scale_y` 用 `get_scale()` 取，建议在 `init()` 缓存进全局。
 
-### touch_move(id, x, y)
+### 各 API 坐标系速查
 
-移动已有触点。
+| API | 坐标系 | 说明 |
+|-----|--------|------|
+| `get_vmouse()` / `get_vmouse_state()` | 屏幕像素 | 虚拟光标位置 |
+| `move_vmouse_pos_offset` | 屏幕像素 | 偏移量直接累加 |
+| `move_vmouse_pos_target` | **触控坐标** | 传入触控坐标，内部 `/scale` 转像素 |
+| `touch_down/move/up` | 触控坐标 | 最终输出，必须用触控坐标 |
+| `get_view_now_pos` / `move_view_offset` | 触控坐标 | 视角系统 |
+| `get_view_start_pos` / `set_view_start_pos` | 触控坐标 | 视角起始点 |
+| `get_wheel_start_pos` | 触控坐标 | 轮盘中心 |
+| `get_screen_size()` | 屏幕像素 | 手机实际分辨率 |
+
+### 示例：在手机屏幕中心点一下
 
 ```lua
-touch_move(id, 0x40000000, 0x40000000)
-```
+function init()
+    scale_x, scale_y = get_scale()
+    sw, sh = get_screen_size()
+end
 
-### touch_up(id)
-
-抬起触点。
-
-```lua
+-- 手机屏幕中心(像素) → 触控坐标
+local cx_px = sw / 2    -- 如 540 (1080 宽屏)
+local cy_px = sh / 2    -- 如 1200
+local id = touch_down(cx_px * scale_x, cy_px * scale_y)
+-- 等价于: touch_down(0x3FFFFFFF, 0x3FFFFFFF)
 touch_up(id)
 ```
 
 ---
 
-## vmouse（虚拟鼠标）
+## 键码与按钮编号
 
-控制网络侧的虚拟光标显示：
+| 键 | 码 | 键 | 码 | 键 | 码 |
+|----|-----|----|-----|----|-----|
+| A–Z | `0x04`–`0x1D` | 1–9 | `0x1E`–`0x26` | 0 | `0x27` |
+| Enter | `0x28` | Esc | `0x29` | Backspace | `0x2A` |
+| Tab | `0x2B` | Space | `0x2C` | F1–F12 | `0x3A`–`0x45` |
+| → | `0x4F` | ← | `0x50` | ↓ | `0x51` |
+| ↑ | `0x52` | `` ` `` | `0x35` | | |
 
-```lua
--- 在坐标 (x, y) 处显示光标
-vmouse_show(x, y)
+**修饰键**：(想监听左 Ctrl 就 `enable_listen_keys(0xE0)`)
 
--- 按下光标
-vmouse_down(x, y)
+| 键 | 码 | 键 | 码 |
+|----|-----|----|-----|
+| 左 Ctrl | `0xE0` | 右 Ctrl | `0xE4` |
+| 左 Shift | `0xE1` | 右 Shift | `0xE5` |
+| 左 Alt | `0xE2` | 右 Alt | `0xE6` |
+| 左 Meta/Win | `0xE3` | 右 Meta/Win | `0xE7` |
 
--- 移动光标
-vmouse_move(x, y)
+**鼠标按钮** (`on_mouse_btn` 的 `button`):
 
--- 抬起光标
-vmouse_up(x, y)
+| 值 | 按钮 |
+|----|------|
+| 0 | 左键 |
+| 1 | 右键 |
+| 2 | 中键 |
+| 3 | 后退 |
+| 4 | 前进 |
 
--- 隐藏光标
-vmouse_hide()
-```
+> 完整键码表见 [HID 键码参考](/api/hid-code)。
 
 ---
 
-## 实用模式
+## 性能模型与规则
 
-### 按键连点 (Autofire)
+- **`on_key`/`on_mouse_btn` 跑在输入热路径上** — 保持极快，别在里面做重循环/大分配。
+- **只有声明过的键/按钮才进 VM** (bitmap 预过滤)，没声明零开销跳过。
+- **慢/热分离**: 慢速值 (scale、view_speed) 在 `init()` 缓存进全局；热值 (vmouse) 随用随取。
+- **数字是 32 位** (固件设了 `LUA_32BITS`): 整数 int32、浮点 float32。别用超过 2^31 的整数。
+- **单核单线程** (引擎在 core1，同核串行): 脚本内无需考虑并发。
+- **没有阻塞 sleep**: 回调必须立刻返回。想写延时逻辑，用**协程** (见下文)。
+- **单次调用有 20 万条指令上限**: 超限即抛错，回调被中断，日志报 `script exceeded 200000 instruction step limit`。正常回调只有几十~几百条指令。
+- **脚本大小 ≤ 64KB**。
+
+---
+
+## 完整示例
+
+### 按键点击 (每键独立触点)
 
 ```lua
-local ticking = false
-local tick_count = 0
+enable_listen_keys(0x13, 0x1E, 0x1F)     -- KEY_P, KEY_1, KEY_2
+local CENTER = 0x3FFFFFFF                  -- 屏幕中心 (触摸坐标)
+local touches = {}                         -- [keycode] = touch_id
 
 function on_key(keycode, down)
-    if keycode == 0x04 then    -- A 键
-        ticking = down
-        tick_count = 0
-        return true
+    if down then
+        touches[keycode] = touch_down(CENTER, CENTER)
+    else
+        local id = touches[keycode]
+        if id and id ~= 0xFF then
+            touch_up(id)
+            touches[keycode] = nil
+        end
     end
-    return false
+    return true
+end
+```
+
+### 连点 Autofire (按住 R → 每 50ms 在光标处点一下)
+
+```lua
+enable_listen_keys(0x15)                  -- KEY_R
+local firing = false
+local acc = 0                              -- 距上次开火累计的微秒
+local INTERVAL = 50000                     -- 50ms (微秒)
+
+function init()
+    scale_x, scale_y = get_scale()
 end
 
-function tick(delta_ms)
-    if not ticking then return end
-    tick_count = tick_count + delta_ms
-    if tick_count >= 100 then   -- 每 100ms 触发一次
-        tick_count = 0
-        local id = touch_down(0x3FFFFFFF, 0x3FFFFFFF)
-        touch_up(id)
+function on_key(keycode, down)
+    firing = down
+    if down then acc = INTERVAL end        -- 按下即刻先点一次
+    return true
+end
+
+function tick(dt_us)
+    if not firing then return end
+    acc = acc + dt_us
+    if acc >= INTERVAL then
+        acc = acc - INTERVAL
+        local mx, my = get_vmouse()
+        local id = touch_down(mx * scale_x, my * scale_y)
+        if id ~= 0xFF then touch_up(id) end
     end
 end
 ```
 
-### 右键拖动跟随
+### 右键长按拖动 (触点跟随光标)
 
 ```lua
+enable_listen_mouse_btn(1)                    -- 鼠标右键
+local drag = nil
+
+function init()
+    scale_x, scale_y = get_scale()
+end
+
+function on_mouse_btn(button, down)
+    local mx, my = get_vmouse()
+    if down then
+        drag = touch_down(mx * scale_x, my * scale_y)
+    elseif drag then
+        touch_up(drag); drag = nil
+    end
+    return true
+end
+
+function tick(dt_us)
+    if drag then
+        local mx, my = get_vmouse()
+        touch_move(drag, mx * scale_x, my * scale_y)
+    end
+end
+```
+
+### 接管鼠标移动 (中键拖动)
+
+`on_mouse_move` 返回 `true` 会把本次 `dx/dy` 清零，core 的默认视角处理被跳过。下例：按住中键期间把移动转成 "在光标处拖动一个触点"。
+
+```lua
+enable_listen_mouse_btn(2)         -- 中键
+enable_listen_mouse_move()         -- 接管移动
 local dragging = false
-local drag_id = nil
+local drag_id  = 0xFF
+
+function init()
+    scale_x, scale_y = get_scale()
+end
 
 function on_mouse_btn(button, down)
     if button == 2 then
         dragging = down
-        if down then
-            drag_id = touch_down(0x3FFFFFFF, 0x3FFFFFFF)
-        else
-            touch_up(drag_id)
+        if not down and drag_id ~= 0xFF then
+            touch_up(drag_id); drag_id = 0xFF
         end
-        return true
     end
     return false
 end
 
 function on_mouse_move(dx, dy)
-    if dragging and drag_id then
-        -- 根据 dx/dy 更新触点位置
-        return true  -- 拦截，不让 core 处理视角
+    if not dragging then return false end
+    local mx, my = get_vmouse()
+    if drag_id == 0xFF then
+        drag_id = touch_down(mx * scale_x, my * scale_y)
+    else
+        touch_move(drag_id, mx * scale_x, my * scale_y)
     end
-    return false
+    return true                    -- 吃掉本次移动
 end
 ```
 
-### 时序宏（协程）
+> 注意: 一旦 `on_mouse_move` 返回 `true`，core 的 vmouse 光标就不会随这次移动更新。若逻辑依赖光标位置，要么放行 (`return false`) 让 core 推进 vmouse，要么自行累加 `dx/dy` 维护坐标。
+
+### 异步动作序列 (协程 coroutine)
+
+引擎**没有阻塞式 sleep**。想写 "按下 → 等 50ms → 滑动 → 等 30ms → 抬起" 这种**带时序的顺序逻辑**，用协程：
 
 ```lua
-local macros = {}
+enable_listen_mouse_btn(1)                     -- 右键
+local scale_x, scale_y = 1, 1
+local tasks = {}                                -- 协程调度队列
 
-function run_macro(name)
-    local co = coroutine.create(function()
-        touch_down(0x20000000, 0x3FFFFFFF)
-        wait_ms(50)
-        touch_up(1)
-        wait_ms(100)
-        touch_down(0x5FFFFFFF, 0x3FFFFFFF)
-        wait_ms(50)
-        touch_up(1)
-    end)
-    table.insert(macros, co)
+function init()
+    scale_x, scale_y = get_scale()
 end
 
-function tick(delta_ms)
-    -- 调度器：推进所有活跃协程
-    for i = #macros, 1, -1 do
-        local ok = coroutine.resume(macros[i])
-        if not ok or coroutine.status(macros[i]) == "dead" then
-            table.remove(macros, i)
+-- 在协程内调用: 暂停当前序列 wait_us 微秒后继续
+local function sleep(wait_us)
+    coroutine.yield(wait_us)
+end
+
+-- 启动一个异步序列: 把函数包成协程入队
+local function spawn(fn)
+    tasks[#tasks + 1] = {
+        co = coroutine.create(fn),
+        remain = 0                              -- 0 → 下个 tick 立刻跑
+    }
+end
+
+function on_mouse_btn(button, down)
+    if button == 1 and down then
+        local mx, my = get_vmouse()             -- 快照按下瞬间的光标位置
+        spawn(function()
+            local id = touch_down(mx * scale_x, my * scale_y)
+            if id == 0xFF then return end       -- 没有空闲触点, 放弃
+            sleep(50000)                        -- 停 50ms
+            touch_move(id, 0x3FFFFFFF, 0x3FFFFFFF)  -- 滑到屏幕中心
+            sleep(30000)                        -- 停 30ms
+            touch_up(id)
+        end)
+    end
+    return false
+end
+
+function tick(dt_us)
+    -- 倒序遍历: 删除已完成任务不影响未遍历的索引
+    for i = #tasks, 1, -1 do
+        local t = tasks[i]
+        t.remain = t.remain - dt_us
+        if t.remain <= 0 then
+            local ok, wait_us = coroutine.resume(t.co)
+            if not ok or coroutine.status(t.co) == "dead" then
+                table.remove(tasks, i)          -- 报错或正常结束 → 移除
+            else
+                t.remain = wait_us or 0         -- yield 让出 → 记下还要等多久
+            end
         end
     end
 end
 ```
 
+**模式要点**:
+- `spawn(fn)` 把任意 "动作序列函数" 变成异步任务；函数里用 `sleep(us)` 表达等待。
+- 用 `dt_us` 倒计时 (`remain -= dt`，到 0 就 resume)。
+- 协程里每一步仍要**轻量** — 在 `tick` 里被 resume，别在一步里做重循环。
+- `coroutine` 标准库可用 (`create/resume/yield/status`)。
+
+### 外部指令控制 (on_custom_event + 参数解码 + print 回传)
+
+`on_custom_event` 是与外界双向通信的核心入口。外部可通过 WebSocket 或 HID 发送文本指令，脚本解码参数执行，再用 `print()` 回传结果。**无需 `enable_listen`** — 只要定义了 `on_custom_event` 就会触发。
+
+```lua
+-- 指令格式:
+--   "tap(540,1200)"           → 在 (540,1200) 点一下
+--   "swipe(100,800,900,800)"  → 从 (100,800) 滑到 (900,800)
+--   "getpos"                  → 返回当前 vmouse 位置
+
+function init()
+    scale_x, scale_y = get_scale()
+end
+
+function on_custom_event(str)
+    -- 解码 "tap(x,y)" 指令
+    local sx, sy = str:match("tap%((%d+),(%d+)%)")
+    if sx then
+        local x, y = tonumber(sx), tonumber(sy)
+        local id = touch_down(x * scale_x, y * scale_y)
+        if id ~= 0xFF then
+            touch_up(id)
+            print("tap ok: (" .. x .. "," .. y .. ")")
+        else
+            warn("tap fail: no free touch point")
+        end
+        return true
+    end
+
+    -- 解码 "swipe(x1,y1,x2,y2)" 指令
+    local x1, y1, x2, y2 = str:match("swipe%((%d+),(%d+),(%d+),(%d+)%)")
+    if x1 then
+        local id = touch_down(tonumber(x1) * scale_x, tonumber(y1) * scale_y)
+        if id == 0xFF then
+            warn("swipe fail: no free touch point")
+            return true
+        end
+        touch_move(id, tonumber(x2) * scale_x, tonumber(y2) * scale_y)
+        touch_up(id)
+        print("swipe ok: (" .. x1 .. "," .. y1 .. ") -> (" .. x2 .. "," .. y2 .. ")")
+        return true
+    end
+
+    -- 查询指令 "getpos"
+    if str == "getpos" then
+        local mx, my, show, down = get_vmouse()
+        print("vmouse: x=" .. mx .. " y=" .. my .. " show=" .. tostring(show) .. " down=" .. tostring(down))
+        return true
+    end
+
+    warn("unknown cmd: " .. str)
+    return true
+end
+```
+
+**发送端示例**:
+
+```bash
+# WebSocket CLI
+echo -ne '\x01tap(540,1200)' | websocat ws://192.168.73.1:80/ws
+```
+
+```
+# HID OUT 帧格式 (CMD 0xFA)
+[55 AA][0D][FA]tap(540,1200)
+```
+
+> WS 路径最大 128 字节，HID 路径最大 60 字节。超出截断。
+
+### 空模板
+
+```lua
+function init() end
+function on_key(keycode, down) return false end
+function on_mouse_btn(button, down) return false end
+function on_custom_event(str) return false end
+function tick(dt_us) end
+```
+
 ---
 
-## 常见键码参考
+## 上传与调试
 
-| 键 | HID 键码 |
-|----|----------|
-| A–Z | `0x04`–`0x1D` |
-| 1–9 | `0x1E`–`0x26` |
-| 0 | `0x27` |
-| Enter | `0x28` |
-| Escape | `0x29` |
-| Space | `0x2C` |
-| LShift | `0xE1` |
-| LCtrl | `0xE0` |
-| LAlt | `0xE2` |
+### 上传脚本
 
-> 完整键码表见 [HID 键码参考](/api/hid-code)。
+上传后保存并立即写入 flash，热重载生效。
+
+### 查看状态
+
+`GET /lua/state` 返回运行状态:
+- `loaded=1 source=stored` → 加载成功。
+- `loaded=0 source=default error=...` → 语法/加载出错，设备回落默认模板。
+- `entry=on_key tick ...` → 引擎识别到的入口函数 (确认函数名没写错)。
+
+### 运行期日志
+
+脚本里的 `print(...)` / `warn(...)` 统一经 WebSocket 调试通道下发。连接 WS 客户端即可实时查看。`print` 带 `[lua]` 前缀，`warn` 带 `[lua warn]` 前缀。
+
+> **双向通信**: `print`/`warn` 是脚本主动向主机推送消息的唯一通道。配合 `on_custom_event` 接收指令，可构建 "主机发指令 → Lua 执行 → print 回报结果" 的完整交互。
+
+---
+
+## 常见坑
+
+- **定义了 `on_key` 却没 `enable_listen_keys`** → 永远不触发。必须声明监听。
+- **把缓存值写成 `init()` 内部的 `local`** → `on_key`/`tick` 看不到。要写**全局**或文件顶层 `local`。
+- **忘了 `touch_up`** → 触点 (最多 10) 很快耗尽，`touch_down` 返回 `0xFF`。
+- **在 `on_key`/`tick` 里做重活** → 输入卡顿。
+- **当成 64 位整数用** → 实际 32 位，大数溢出。
+- **想"按住持续触发"却只写 `on_key`** → 边沿只触发一次；用 `tick` + `down` 标志。
+- **多个键共用一个触点变量** → 会串。用 `touches[keycode]` 表分开管理。
+- **`on_custom_event` 里忘了 `return true`** → core 虽无默认处理，但返回 `false` 表示 "未处理"。
+- **字符串超上限** → `on_custom_event` 的 `str` 会被截断 (WS:128B / HID:60B)。长指令用简短格式或拆分发送。

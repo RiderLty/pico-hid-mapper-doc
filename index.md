@@ -52,7 +52,7 @@ features:
 ## 硬件需求
 
 <div align="center">
-  <img src="https://github.com/waveshareteam/RP2350-USB-C/raw/main/assets/Product-1.webp" alt="RP2350-USB-C" width="320" style="border-radius: 12px; margin: 16px 0;">
+  <img src="/board.webp" alt="RP2350-USB-C" width="320" style="border-radius: 12px; margin: 16px 0;">
   <p><strong>微雪 RP2350-USB-C</strong></p>
 </div>
 
