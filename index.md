@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: pico-hid-mapper
-  text: USB HID 映射器固件
+  text: USB HID 映射器
   tagline: 基于微雪 RP2350-USB-C 将键鼠输入映射为触屏操作
   image:
     src: /icon.png

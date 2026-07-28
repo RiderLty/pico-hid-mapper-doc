@@ -14,7 +14,7 @@
 | 物品 | 用途 |
 |------|------|
 | USB 键盘 / 鼠标 | PIO 切换为 Host 模式后，通过 USB Hub 接 PIO-USB-C 口 |
-| USB Hub（推荐 CH334 USB 2.0 Hub） | PIO Host 模式下扩展 USB 接口 |
+| USB Hub | PIO Host 模式下扩展 USB 接口 （推荐 CH334 USB 2.0 Hub） |
 
 ## 第一步：刷入固件
 
