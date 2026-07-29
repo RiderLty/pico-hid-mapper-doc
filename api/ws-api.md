@@ -2,7 +2,7 @@
 
 设备在 80 端口提供 WebSocket 服务，用于双向通信。
 
-- **USB 直连**: `ws://192.168.73.1:80/ws`
+- **USB 直连**（需要断开其他网络）: `ws://192.168.73.1/ws`
 - **vPointer 转发**: `ws://<手机IP>:8000/ws`
 
 ---
@@ -31,7 +31,7 @@ Web UI 内建输入框（PICO 配置 → 管理脚本 → 底部），直接输�
 **命令行（websocat）**
 
 ```bash
-echo -ne '\x01tap(540,1200)' | websocat ws://192.168.73.1/ws
+echo -ne '\x01tap(540,1200)\n' | websocat ws://192.168.73.1/ws
 ```
 
 **Python**

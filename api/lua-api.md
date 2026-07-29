@@ -79,7 +79,7 @@ function on_mouse_wheel(wheel)
     return false
 end
 
--- 周期回调 (主循环限频调用, 约 1000Hz)。dt_us = 距上次 tick 的微秒差
+-- 周期回调 (主循环限频调用, 1000Hz)。dt_us = 距上次 tick 的微秒差
 function tick(dt_us)
 end
 
@@ -100,6 +100,7 @@ end
 | **收到鼠标移动/滚轮** | 若已 `enable_listen_mouse_move`/`enable_listen_mouse_wheel` → 每次移动/滚动同步调用 (**非边沿, 连续触发**) |
 | **主循环 (限频 1ms, core1)** | 调用 `tick(dt_us)` (约 **1000Hz**) |
 | **切换配置槽位 / 下发新配置** | 慢速值 (scale/view_speed) 重算 → **再次调用 `init()`** (VM 不重建, 全局保留) |
+| **写入存储** | 将保存在RAM里的内存数据，持久化到Flash。<br>耗时操作，会导致host协议栈中断，故完成后会重启设备 |
 
 要点：
 
@@ -107,7 +108,7 @@ end
 - 热重载 (上传新脚本) = VM 重建，所有全局/状态清空后重新跑。
 - `on_key`/`on_mouse_btn` **只在边沿触发** (按一次、松一次)，不会按住反复触发。想 "按住期间持续动作"，用 `tick` + 一个 `down` 标志。
 - `on_mouse_move`/`on_mouse_wheel` **不是边沿**：只要有移动/滚动就会触发 (可能每毫秒多次)。别在里面做重活。
-
+- **⚠️ 调试完成后，一定记得点击 "写入存储" 按钮，否则配置会在重启后丢失。**
 ---
 
 ## 声明 / 解除监听
@@ -141,8 +142,8 @@ end
 
 **拦截语义 (重要)**：
 
-- `on_key`/`on_mouse_btn` 返回 `true` → core 跳过对该键的**全部默认处理** (包括 Alt+F1~F9 切槽热键、鼠标切换键、WASD 轮盘、配置映射)。返回 `false` → 交回默认逻辑。
-- `on_mouse_move`/`on_mouse_wheel` 返回 `true` → core 把对应位移量清零。**移动和滚轮分开判定**: 只拦截 `on_mouse_move` 不影响同帧滚轮，反之亦然。
+- `on_key`/`on_mouse_btn` 返回 `true` → core 跳过对该键的**全部默认处理** (包括 Alt+F1~F9 切槽热键、鼠标切换键、WASD 轮盘、配置映射)。返回 `false` → Lua处理完毕后，交给映射继续处理原始逻辑。
+- `on_mouse_move`/`on_mouse_wheel` 返回 `true` → 对应位移量清零。**移动和滚轮分开判定**: 只拦截 `on_mouse_move` 不影响同帧滚轮，反之亦然。
 
 ---
 
@@ -163,7 +164,7 @@ end
 | 函数 | 返回 | 冷/热 | 用法 |
 |------|------|--------|------|
 | `get_scale()` | `scale_x, scale_y` | **慢** (配置/槽位变才变) | 在 `init()` 里缓存进全局。像素→触摸缩放因子。 |
-| `get_view_speed()` | `view_speed_x, view_speed_y` | **慢** | 同上。灵敏度。 |
+| `get_view_speed()` | `view_speed_x, view_speed_y` | **慢** | 鼠标控制视角的灵敏度=触摸缩放因子x用户自定义的视角灵敏度。 |
 | `get_vmouse()` | `x, y, show, down` | **热** (每次鼠标移动都变) | 随用随取，别缓存。`x,y` = 虚拟光标当前**屏幕像素**坐标。 |
 | `get_screen_size()` | `w, h` | **慢** | 当前配置的屏幕尺寸 (像素)。 |
 
@@ -190,17 +191,16 @@ end
 |------|------|
 | `get_view_id()` / `set_view_id(id)` | 当前视角触点 id (`0xFF` = 未触摸)。 |
 | `get_view_now_pos()` → `x, y` | 当前视角坐标。 |
-| `move_view_offset(x, y)` | 以偏移量移动视角。仅当 `map_on` 且已有视角触点时生效。 |
+| `move_view_offset(x, y)` | 以偏移量移动视角。仅当 `map_on` 且已有视角触点时生效。建议使用方式为 鼠标移动 x (scaleX, yscaleY)。 |
 | `get_view_start_pos()` / `set_view_start_pos(x, y)` | 视角起始点。 |
 | `get_view_speed()` / `set_view_speed(x, y)` | 视角控制速度 (灵敏度)。 |
 | `set_view_auto_center(on)` | 视角越界时是否回到 `start_pos`。默认 `true`。 |
 | `set_view_auto_release_timeout(ms)` | 视角触点无移动多久 (毫秒) 后自动释放；`0` = 永不自动释放。默认 `400`。 |
-
 ---
 
 ## 虚拟光标 (vmouse)
 
-`x,y` 为**屏幕像素**；触点 id 由内部管理，故封装为函数。
+坐标均为**真实屏幕像素**；触点 id 由内部管理，故封装为函数。
 
 | 函数 | 说明 |
 |------|------|
@@ -242,7 +242,7 @@ end
 
 ### 触控坐标
 
-`touch_down/move/up`、`get_view_now_pos()` 等使用**触控坐标**: 范围 `0..0x7FFFFFFE` (记作 `TOUCH_MAX`)。无论手机分辨率多少，触控坐标范围永远不变。**屏幕正中心永远是 `0x3FFFFFFF`** (= TOUCH_MAX / 2)。
+`touch_down/move/up`、`get_view_now_pos()` 等使用**触控坐标**: 范围 `0..0x7FFFFFFE` 。无论手机分辨率多少，触控坐标范围永远不变。**屏幕正中心永远是 `0x3FFFFFFF`** (= 0x7FFFFFFE / 2)。
 
 ### 换算
 
@@ -263,7 +263,7 @@ pixel_x = touch_x / scale_x
 |-----|--------|------|
 | `get_vmouse()` / `get_vmouse_state()` | 屏幕像素 | 虚拟光标位置 |
 | `move_vmouse_pos_offset` | 屏幕像素 | 偏移量直接累加 |
-| `move_vmouse_pos_target` | **触控坐标** | 传入触控坐标，内部 `/scale` 转像素 |
+| `move_vmouse_pos_target` | 屏幕像素 | 传入坐标，直接移动光标到目标位置 |
 | `touch_down/move/up` | 触控坐标 | 最终输出，必须用触控坐标 |
 | `get_view_now_pos` / `move_view_offset` | 触控坐标 | 视角系统 |
 | `get_view_start_pos` / `set_view_start_pos` | 触控坐标 | 视角起始点 |
@@ -323,12 +323,12 @@ touch_up(id)
 
 ## 性能模型与规则
 
-- **`on_key`/`on_mouse_btn` 跑在输入热路径上** — 保持极快，别在里面做重循环/大分配。
+- **`on_key`/`on_mouse_btn` 跑在输入热路径上** — 每次有按键/鼠标事件时调用，必须保持极快，不要在里面做重循环/大分配。
 - **只有声明过的键/按钮才进 VM** (bitmap 预过滤)，没声明零开销跳过。
-- **慢/热分离**: 慢速值 (scale、view_speed) 在 `init()` 缓存进全局；热值 (vmouse) 随用随取。
+- **慢/热分离**: 慢速值 (scale、view_speed) 在 `init()` 缓存进全局，以减少每次调用的开销；热值 (vmouse) 随用随取。
 - **数字是 32 位** (固件设了 `LUA_32BITS`): 整数 int32、浮点 float32。别用超过 2^31 的整数。
 - **单核单线程** (引擎在 core1，同核串行): 脚本内无需考虑并发。
-- **没有阻塞 sleep**: 回调必须立刻返回。想写延时逻辑，用**协程** (见下文)。
+- **没有阻塞 sleep**: 回调必须立刻返回。如果需要使用sleep，用**协程** (见下文)。
 - **单次调用有 20 万条指令上限**: 超限即抛错，回调被中断，日志报 `script exceeded 200000 instruction step limit`。正常回调只有几十~几百条指令。
 - **脚本大小 ≤ 64KB**。
 
@@ -424,6 +424,8 @@ enable_listen_mouse_btn(2)         -- 中键
 enable_listen_mouse_move()         -- 接管移动
 local dragging = false
 local drag_id  = 0xFF
+local drag_x = 0
+local drag_y = 0
 
 function init()
     scale_x, scale_y = get_scale()
@@ -444,19 +446,162 @@ function on_mouse_move(dx, dy)
     local mx, my = get_vmouse()
     if drag_id == 0xFF then
         drag_id = touch_down(mx * scale_x, my * scale_y)
+        drag_x = mx * scale_x
+        drag_y = my * scale_y
     else
-        touch_move(drag_id, mx * scale_x, my * scale_y)
+        drag_x = drag_x + dx * scale_x
+        drag_y = drag_y + dy * scale_y
+        touch_move(drag_id,drag_x  , drag_y)
     end
     return true                    -- 吃掉本次移动
-end
+end 
 ```
 
 > 注意: 一旦 `on_mouse_move` 返回 `true`，core 的 vmouse 光标就不会随这次移动更新。若逻辑依赖光标位置，要么放行 (`return false`) 让 core 推进 vmouse，要么自行累加 `dx/dy` 维护坐标。
 
+### 采集压枪数据和压枪数据重放
+监听鼠标移动事件，并以100hz将鼠标移动打印在控制台
+```lua
+
+enable_listen_mouse_btn(0)
+enable_listen_mouse_move()
+
+-- 全局状态变量
+local is_recording = false   -- 记录开关状态
+local total_dx = 0           -- 累计 X 轴位移
+local total_dy = 0           -- 累计 Y 轴位移
+local acc_us = 0             -- 时间累加器 (微秒)
+
+local INTERVAL_US = 10000    -- 100Hz 对应的时间间隔：10,000 微秒 (10 毫秒)
+
+-- 脚本初始化/热重载回调
+function init()
+    is_recording = false
+    total_dx = 0
+    total_dy = 0
+    acc_us = 0
+end
+
+-- 鼠标按键事件 (边沿触发)
+function on_mouse_btn(button, down)
+    -- 仅响应鼠标左键 (button 0) 且需映射开启 (is_map_on)
+    if button == 0 and is_map_on() then
+        if down then
+            -- 按下左键：开始记录并重置数据
+            is_recording = true
+            total_dx = 0
+            total_dy = 0
+            acc_us = 0
+            print(">>> [压枪记录] 开始记录数据 (100Hz) <<<")
+        else
+            -- 松开左键：停止记录并打印最终汇总
+            if is_recording then
+                is_recording = false
+                print(string.format(">>> [压枪记录] 停止记录 | 最终总位移 -> X: %d, Y: %d <<<", total_dx, total_dy))
+            end
+        end
+    end
+    
+    -- 返回 false 放行按键，确保游戏内正常开火；若设为 true 会吃掉左键点击
+    return false
+end
+
+-- 鼠标相对移动事件 (连续触发)
+function on_mouse_move(dx, dy)
+    -- 仅在记录开启状态下累加鼠标移动值
+    if is_recording then
+        total_dx = total_dx + dx
+        total_dy = total_dy + dy
+    end
+    
+    -- 返回 false 放行移动，确保视角能正常移动；若设为 true 视角会被卡住
+    return false
+end
+
+-- 周期回调 (约 1000Hz 频率调用, dt_us 为距上次调用的微秒差)
+function tick(dt_us)
+    if not is_recording then return end
+
+    acc_us = acc_us + dt_us
+    -- 当时间累积达到 10ms (10,000µs) 时打印一次，实现 100Hz 打印频率
+    if acc_us >= INTERVAL_US then
+        acc_us = acc_us - INTERVAL_US
+        print(string.format("[压枪数据] 累计总位移 -> dX: %d | dY: %d", total_dx, total_dy))
+        total_dx = 0
+        total_dy = 0
+    end
+end
+```
+
+将录制的鼠标位移数据，在按下左键的时候重放
+
+```lua
+
+enable_listen_mouse_btn(0)
+-- -----------------------------------------------------------------
+-- 数据压缩区：一对一对填即可 [dx1, dy1,  dx2, dy2,  dx3, dy3, ...]
+-- -----------------------------------------------------------------
+local RECOIL_DATA = {
+    0,1,1,8,1,11,1,7,3,20,2,19,1,24,3,30,2,34,3,42,3,46,3,57,1,52,2,60,2,63,2,66,3,67,3,68,3,70,2,71,3,72,3,70,3,69,4,71,4,68,4,67,4,66,4,66,3,66,3,65,2,65,2,66,0,66,1,65,1,64,2,64,1,25,3,101,1,62,1,62,0,61,-2,62,-1,61,-3,60,-2,61,-2,60,-1,61,-3,61,-3,62,-3,61,-3,62,-3,63,-2,62,-2,62,-2,62,-2,63,0,25,-1,100,-1,64,-1,64,-1,70,-2,61,0,58,-1,63,0,62,-1,63,0,63,1,65,1,66,0,65,0,66,1,66,1,66,0,66,2,67,2,59,3,71,2,63,3,63,2,63,3,64,2,61,2,60,1,60,1,60,2,60
+}
+
+local is_firing = false
+local current_step = 1
+local acc_us = 0
+local INTERVAL_US = 10000 -- 10ms (100Hz)
+
+local view_speed_x = 1
+local view_speed_y = 1
+function init()
+    is_firing = false
+    current_step = 1
+    acc_us = 0
+    view_speed_x , view_speed_y = get_view_speed()
+end
+
+function on_mouse_btn(button, down)
+    if button == 0 and is_map_on() then
+        if down then
+            is_firing = true
+            current_step = 1
+            acc_us = 0
+        else
+            is_firing = false
+        end
+    end
+    return false
+end
+
+function tick(dt_us)
+    if not is_firing or #RECOIL_DATA == 0 then return end
+
+    acc_us = acc_us + dt_us
+
+    if acc_us >= INTERVAL_US then
+        acc_us = acc_us - INTERVAL_US
+
+        -- 自动按步骤计算出数组中 dx 和 dy 的位置
+        local idx = (current_step - 1) * 2 + 1
+
+        if idx <= #RECOIL_DATA then
+            local dx = RECOIL_DATA[idx]
+            local dy = RECOIL_DATA[idx + 1]
+            move_view_offset(dx * view_speed_x , dy * view_speed_y )
+            current_step = current_step + 1
+        else
+            -- 数据用尽后维持最后一帧的下压幅度
+            local last_dx = RECOIL_DATA[#RECOIL_DATA - 1]
+            local last_dy = RECOIL_DATA[#RECOIL_DATA]
+            move_view_offset(last_dx * view_speed_x, last_dy * view_speed_y )
+        end
+    end
+end
+```
+
 ### 异步动作序列 (协程 coroutine)
 
 引擎**没有阻塞式 sleep**。想写 "按下 → 等 50ms → 滑动 → 等 30ms → 抬起" 这种**带时序的顺序逻辑**，用协程：
-
+例如vmouse模式下，右键将物品拖动到丢弃区域
 ```lua
 enable_listen_mouse_btn(1)                     -- 右键
 local scale_x, scale_y = 1, 1
@@ -602,7 +747,8 @@ function tick(dt_us) end
 
 ### 上传脚本
 
-上传后保存并立即写入 flash，热重载生效。
+编辑后点击**加载到内存**，脚本立即热重载生效。
+调试完成后，点击**写入存储**，将脚本写入 flash 并重启，永久生效。
 
 ### 查看状态
 
