@@ -461,54 +461,6 @@ end
 
 > 注意: 一旦 `on_mouse_move` 返回 `true`，core 的 vmouse 光标就不会随这次移动更新。若逻辑依赖光标位置，要么放行 (`return false`) 让 core 推进 vmouse，要么自行累加 `dx/dy` 维护坐标。
 
-### 测量鼠标移动距离（按住左键拖动）
-
-按住鼠标左键并拖动，松开后打印鼠标累计位移。可用于测量视角灵敏度。
-
-```lua
--- 测量鼠标移动距离脚本（监听鼠标左键）
-enable_listen_mouse_btn(0)   -- 鼠标左键
-enable_listen_mouse_move()
-
-local recording = false
-local total_dx = 0
-local total_dy = 0
-
-function init()
-    recording = false
-    total_dx = 0
-    total_dy = 0
-end
-
-function on_mouse_btn(button, down)
-    if button == 0 then
-        if down and is_map_on() then
-            recording = true
-            total_dx = 0
-            total_dy = 0
-            print("测量开始（左键按住），移动鼠标...")
-        elseif not down and recording then
-            recording = false
-            print(string.format(
-                "测量结束 | 总位移: dx=%d, dy=%d",
-                total_dx, total_dy
-            ))
-            total_dx = 0
-            total_dy = 0
-        end
-    end
-    return false   -- 放行左键，不影响正常操作（例如开火）
-end
-
-function on_mouse_move(dx, dy)
-    if recording then
-        total_dx = total_dx + dx
-        total_dy = total_dy + dy
-    end
-    return false   -- 放行移动，不影响视角控制
-end
-```
-
 ### 采集压枪数据和压枪数据重放
 监听鼠标移动事件，并以100hz将鼠标移动打印在控制台
 ```lua

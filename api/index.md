@@ -15,6 +15,8 @@ pico-hid-mapper 提供三层可编程接口：
 - **[Lua 脚本 API](/api/lua-api)** — 板载 Lua 开发手册
 - **[HID 键码参考](/api/hid-code)** — 完整 HID 键盘/鼠标键码速查表
 
+> 💡 **提示**：每个 API 参考页面均可下载对应的 Markdown 源文件，将文档喂给 AI 工具（如 Claude、ChatGPT 等），可快速生成 Lua 脚本、HID 命令帧或 WebSocket 通信代码。
+
 ## 网络参数
 
 设备通过 USB 网卡 (CDC) 与手机直连，Pico 固定 IP 为 `192.168.73.1`（端口 80）。也可通过 vPointer 端口转发，使用手机局域网 IP + 端口 8000 访问。

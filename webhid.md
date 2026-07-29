@@ -2,15 +2,14 @@
 
 浏览器端 HID 调试工具，通过 WebHID API 直接与 Pico 设备通信。
 
-## 使用前提
+<iframe
+  src="/webhid/index.html"
+  class="webhid-frame"
+  title="WebHID 调试工具"
+  loading="lazy"
+></iframe>
 
-1. Pico 的 PIO 口已切换为 **Device 模式**（Web UI → PICO 配置 → 切换 PIO 角色）
-2. 使用 **Chrome / Edge** 浏览器（支持 WebHID API）
-3. Pico 的 PIO-USB-C 口连接到电脑
 
-## 启动工具
-
-点击下方按钮在新窗口打开工具，或直接使用下方嵌入页面：
 
 <div style="margin: 16px 0;">
   <a href="/webhid/index.html" target="_blank"
@@ -19,6 +18,14 @@
     🛠️ 在新窗口打开 WebHID 工具
   </a>
 </div>
+
+
+## 使用前提
+
+1. Pico 的 PIO 口已切换为 **Device 模式**（Web UI → PICO 配置 → 切换 PIO 角色）
+2. 使用 **Chrome / Edge** 浏览器（支持 WebHID API）
+3. Pico 的 PIO-USB-C 口连接到电脑
+
 
 ## 功能说明
 
@@ -30,13 +37,6 @@ WebHID 工具支持以下操作：
 - **键盘/鼠标模拟** — 发送标准 HID 键盘/鼠标报文
 - **事件查看** — 接收并解析设备 IN 端点上报的事件
 
-## 嵌入工具
-
-<iframe
-  src="/webhid/index.html"
-  class="webhid-frame"
-  title="WebHID 调试工具"
-  loading="lazy"
-></iframe>
 
 > 工具为纯前端页面，所有数据在浏览器本地处理，不会上传到任何服务器。
+

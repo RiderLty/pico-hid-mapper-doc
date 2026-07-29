@@ -1,5 +1,7 @@
 # HID 键码参考
 
+> 📥 <a href="/api/defines.h" download>点击下载 defines.h</a>
+
 USB HID 键盘键码表。按键名使用 `defines.h` 中的宏名称。
 
 ---
