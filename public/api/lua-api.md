@@ -185,6 +185,76 @@ end
 
 ---
 
+## 按键映射查询
+
+查询当前配置中某个键的映射信息。坐标返回 **触控坐标** (`0..TOUCH_MAX`)，与 `get_view_now_pos()` / `get_wheel_start_pos()` 一致。
+
+| 函数 | 返回 / 参数 | 说明 |
+|------|-------------|------|
+| `get_key_map(code)` | `code`: unified keycode (0-254=HID 键盘键, 0x100+鼠标按键) | `idx, type, flags, coord_count, interval_count` / 无映射返回 **nil**。`type`: 0=PRESS, 1=MULT_PRESS, 2=SMART_TOGGLE, 3=WHEEL, 4=CLICK, 5=AUTO_FIRE, 6=DRAG。`flags`: bit0=RELEASE_MOUSE, bit1=SEPARAT, bit2=TOUCH。 |
+| `get_key_map_by_index(idx)` | `idx`: 直接 key_maps 索引 (0-31) | `code, type, flags, coord_count, interval_count, coord_start, interval_start` / 越界返回 **nil**。用于遍历全部映射。 |
+| `get_key_coord(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `x, y, r_px` (触控坐标 + 像素级随机半径) / 越界返回三个 **nil**。 |
+| `get_key_interval(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `interval_ms` (毫秒) / 越界返回 **nil**。AUTO_FIRE 时 `step=0`=on_ms, `step=1`=off_ms。 |
+
+典型用法: 由 `get_key_map(code)` 拿到 `coord_count/interval_count`, 再用 `get_key_coord(idx,i)` / `get_key_interval(idx,i)` 逐条读出。
+
+```lua
+-- 查看 KEY_P (0x13) 的映射详情
+local idx, typ, flags, ccnt, icnt = get_key_map(0x13)
+if idx then
+    print(string.format("P: idx=%d type=%d flags=%d", idx, typ, flags))
+    for i = 0, ccnt - 1 do
+        local x, y, r = get_key_coord(idx, i)
+        print(string.format("  coord[%d]: x=%d y=%d r_px=%d", i, x, y, r))
+    end
+end
+
+-- 遍历全部映射
+for i = 0, 31 do
+    local code, typ = get_key_map_by_index(i)
+    if code and code ~= 0 then
+        print(string.format("idx=%d code=0x%x type=%d", i, code, typ))
+    end
+end
+```
+
+---
+
+## 输入注入
+
+从 Lua **主动向映射引擎注入**键盘/鼠标事件，走完整的 core 映射管线 (键状态去重、按键映射、触屏输出等)，效果等同于真实 USB 外设产生的输入。注入期间**跳过 Lua 拦截** (`on_key`/`on_mouse_btn` 等不会触发)，防止递归死循环。
+
+| 函数 | 参数 | 说明 |
+|------|------|------|
+| `input_keyboard(keycode, down)` | `keycode`: HID 键码 (0-254); `down`: bool | 注入键盘按下/释放。keycode 为 0 或 >254 则静默忽略。 |
+| `input_mouse_button(button, down)` | `button`: 0-7; `down`: bool | 注入鼠标按键。button 越界静默忽略。 |
+| `input_mouse_move(dx, dy[, wheel])` | `dx,dy`: 相对位移 (像素); `wheel`: 滚轮 (默认 0) | 注入鼠标移动/滚轮。效果取决于 `map_on`: 映射开→移动视角; 映射关→移动 vmouse。 |
+
+> **注意**: 注入的键事件会**真实修改键状态 bitmap** (`key_state[]`)。若注入 `input_keyboard(0x15, true)` 后未注入对应的 `false`，映射引擎将认为该键一直处于按下状态，导致动作卡在 HOLD 阶段。
+
+```lua
+-- 注入一次 R 键按下并释放
+input_keyboard(0x15, true)   -- KEY_R down
+input_keyboard(0x15, false)  -- KEY_R up
+
+-- 注入鼠标左键点击
+input_mouse_button(0, true)
+input_mouse_button(0, false)
+
+-- 注入鼠标向右移动 100 像素
+input_mouse_move(100, 0)
+```
+
+---
+
+## 槽位查询
+
+| 函数 | 返回 | 说明 |
+|------|------|------|
+| `get_current_slot()` | `int` (0-8) | 当前激活的配置槽位索引。恒返回 0-8 有效值。 |
+
+---
+
 ## 视角 (View)
 
 坐标均为**触控坐标** (`0..TOUCH_MAX`)。
@@ -270,6 +340,7 @@ pixel_x = touch_x / scale_x
 | `get_view_now_pos` / `move_view_offset` | 触控坐标 | 视角系统 |
 | `get_view_start_pos` / `set_view_start_pos` | 触控坐标 | 视角起始点 |
 | `get_wheel_start_pos` | 触控坐标 | 轮盘中心 |
+| `get_key_coord` | 触控坐标 | 按键映射的坐标 (`x,y,r_px`) |
 | `get_screen_size()` | 屏幕像素 | 手机实际分辨率 |
 
 ### 示例：在手机屏幕中心点一下
@@ -460,6 +531,54 @@ end
 ```
 
 > 注意: 一旦 `on_mouse_move` 返回 `true`，core 的 vmouse 光标就不会随这次移动更新。若逻辑依赖光标位置，要么放行 (`return false`) 让 core 推进 vmouse，要么自行累加 `dx/dy` 维护坐标。
+
+### 测量鼠标移动距离（按住左键拖动）
+
+按住鼠标左键并拖动，松开后打印鼠标累计位移。可用于测量视角灵敏度。
+
+```lua
+-- 测量鼠标移动距离脚本（监听鼠标左键）
+enable_listen_mouse_btn(0)   -- 鼠标左键
+enable_listen_mouse_move()
+
+local recording = false
+local total_dx = 0
+local total_dy = 0
+
+function init()
+    recording = false
+    total_dx = 0
+    total_dy = 0
+end
+
+function on_mouse_btn(button, down)
+    if button == 0 then
+        if down and is_map_on() then
+            recording = true
+            total_dx = 0
+            total_dy = 0
+            print("测量开始（左键按住），移动鼠标...")
+        elseif not down and recording then
+            recording = false
+            print(string.format(
+                "测量结束 | 总位移: dx=%d, dy=%d",
+                total_dx, total_dy
+            ))
+            total_dx = 0
+            total_dy = 0
+        end
+    end
+    return false   -- 放行左键，不影响正常操作（例如开火）
+end
+
+function on_mouse_move(dx, dy)
+    if recording then
+        total_dx = total_dx + dx
+        total_dy = total_dy + dy
+    end
+    return false   -- 放行移动，不影响视角控制
+end
+```
 
 ### 采集压枪数据和压枪数据重放
 监听鼠标移动事件，并以100hz将鼠标移动打印在控制台

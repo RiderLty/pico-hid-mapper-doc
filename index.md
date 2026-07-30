@@ -34,7 +34,7 @@ features:
     details: 内建 HTTP 服务器 + WebSocket 调试通道。浏览器上传配置、编辑 Lua 脚本、实时查看日志。
   - icon: 📱
     title: Android 适配
-    details: 无需配置网络，USB网卡 (CDC) 免驱，手机直连自动分配 IP。搭配 vPointer 端口转发，浏览器访问 Web UI。
+    details: 无需配置网络，USB网卡免驱，手机直连自动分配 IP。搭配 vPointer 端口转发，浏览器访问 Web UI。
   - icon: 🛠️
     title: WebHID 控制
     details: 基于WebHID API的上位机控制工具，在浏览器中直接使用。
