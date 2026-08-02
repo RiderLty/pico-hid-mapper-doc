@@ -444,38 +444,60 @@ touch_up(id)
 
 ## 完整示例
 
-### 跑马灯 (LED 颜色循环)
+### 跑马灯 (LED 渐变循环)
 
-利用 `tick(dt_us)` 驱动，每 20ms 切换一种颜色，在红、绿、蓝、青、黄、紫、白之间循环。
+利用 `tick(dt_us)` 驱动，在颜色之间平滑过渡（线性插值），每 1s 完成一次颜色切换。调节 `MAX_BRIGHT` 控制最大亮度。
 
 ```lua
--- 跑马灯：LED 颜色自动循环
+-- 跑马灯：红→绿→蓝 平滑渐变，每 1s 过渡完成
 local COLORS = {
     {255, 0, 0},     -- 红
     {0, 255, 0},     -- 绿
     {0, 0, 255},     -- 蓝
-    {0, 255, 255},   -- 青
-    {255, 255, 0},   -- 黄
-    {255, 0, 255},   -- 紫
-    {255, 255, 255}, -- 白
 }
+local MAX_BRIGHT = 20     -- 最大亮度 (0-255)，越小越暗
+
 local idx = 1
 local acc = 0
-local INTERVAL = 20000  -- 20ms (微秒)
+local TRANSITION = 1000000  -- 1s (微秒)
+local cr, cg, cb = 0, 0, 0
+
+function init()
+    set_led(MAX_BRIGHT, 0, 0)
+    cr, cg, cb = MAX_BRIGHT, 0, 0
+end
 
 function tick(dt_us)
     acc = acc + dt_us
-    if acc >= INTERVAL then
-        acc = acc - INTERVAL
-        local c = COLORS[idx]
-        set_led(c[1], c[2], c[3])
+    if acc >= TRANSITION then
+        acc = acc - TRANSITION
         idx = idx + 1
         if idx > #COLORS then idx = 1 end
+    end
+
+    local t = acc / TRANSITION
+    local prev = idx - 1
+    if prev < 1 then prev = #COLORS end
+
+    local r1 = math.floor(COLORS[prev][1] * MAX_BRIGHT / 255 + 0.5)
+    local g1 = math.floor(COLORS[prev][2] * MAX_BRIGHT / 255 + 0.5)
+    local b1 = math.floor(COLORS[prev][3] * MAX_BRIGHT / 255 + 0.5)
+    local r2 = math.floor(COLORS[idx][1]  * MAX_BRIGHT / 255 + 0.5)
+    local g2 = math.floor(COLORS[idx][2]  * MAX_BRIGHT / 255 + 0.5)
+    local b2 = math.floor(COLORS[idx][3]  * MAX_BRIGHT / 255 + 0.5)
+
+    local nr = math.floor(r1 + (r2 - r1) * t + 0.5)
+    local ng = math.floor(g1 + (g2 - g1) * t + 0.5)
+    local nb = math.floor(b1 + (b2 - b1) * t + 0.5)
+
+    if nr ~= cr or ng ~= cg or nb ~= cb then
+        cr, cg, cb = nr, ng, nb
+        set_led(cr, cg, cb)
     end
 end
 ```
 
-> 提示：把 `INTERVAL` 改大/改小可调速度。改 `COLORS` 表可自定义颜色序列。
+> 提示：改 `MAX_BRIGHT` 调亮度，改 `COLORS` 表自定义颜色序列，改 `TRANSITION` 调过渡速度。相邻颜色之间线性插值，无跳变。
 
 ### 按键点击 (每键独立触点)
 
