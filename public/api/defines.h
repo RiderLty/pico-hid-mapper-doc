@@ -1,8 +1,42 @@
-#define MOUSE_BUTTON_LEFT 0 // Left mouse button
-#define MOUSE_BUTTON_RIGHT 1 // Right mouse button
-#define MOUSE_BUTTON_MIDDLE 2 // Middle mouse button
-#define MOUSE_BUTTON_BACK 3 // Back mouse button
-#define MOUSE_BUTTON_FORWARD 4 // Forward mouse button
+// ── 游戏手柄按钮类型（uint8_t，0x01..0x1B，用于 btn_map 查表）──
+#define BTN_A      0x01  // A / Cross
+#define BTN_B      0x02  // B / Circle
+#define BTN_X      0x03  // X / Square
+#define BTN_Y      0x04  // Y / Triangle
+#define BTN_LB     0x05  // 左肩键 L1
+#define BTN_RB     0x06  // 右肩键 R1
+#define BTN_LT     0x07  // 左扳机数字 L2
+#define BTN_RT     0x08  // 右扳机数字 R2
+#define BTN_SELECT 0x09  // Select / Back / Share / Create
+#define BTN_START  0x0A  // Start / Options
+#define BTN_LS     0x0B  // 左摇杆按下 L3
+#define BTN_RS     0x0C  // 右摇杆按下 R3
+#define BTN_HOME   0x0D  // Home / Guide / PS
+#define BTN_MISC   0x0E  // 其他（触控板 / Mute / Capture）
+#define BTN_DPAD_UP    0x10  // 十字键 上
+#define BTN_DPAD_DOWN  0x11  // 十字键 下
+#define BTN_DPAD_LEFT  0x12  // 十字键 左
+#define BTN_DPAD_RIGHT 0x13  // 十字键 右
+#define BTN_EXTRA_1  0x14  // 额外按键
+#define BTN_EXTRA_2  0x15  // 额外按键
+#define BTN_EXTRA_3  0x16  // 额外按键
+#define BTN_EXTRA_4  0x17  // 额外按键
+#define BTN_EXTRA_5  0x18  // 额外按键
+#define BTN_EXTRA_6  0x19  // 额外按键
+#define BTN_EXTRA_7  0x1A  // 额外按键
+#define BTN_EXTRA_8  0x1B  // 额外按键
+
+// 向后兼容别名
+#define DPAD_UP    BTN_DPAD_UP
+#define DPAD_DOWN  BTN_DPAD_DOWN
+#define DPAD_LEFT  BTN_DPAD_LEFT
+#define DPAD_RIGHT BTN_DPAD_RIGHT
+
+#define MOUSE_BUTTON_LEFT 0x00 // Left mouse button
+#define MOUSE_BUTTON_RIGHT 0x01 // Right mouse button
+#define MOUSE_BUTTON_MIDDLE 0x02 // Middle mouse button
+#define MOUSE_BUTTON_BACK 0x03 // Back mouse button
+#define MOUSE_BUTTON_FORWARD 0x04 // Forward mouse button
 
 #define KEY_NONE 0x00 // No key pressed
 #define KEY_ERR_OVF 0x01 //  Keyboard Error Roll Over - used for all slots if too many keys are pressed ("Phantom key")
