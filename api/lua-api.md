@@ -81,6 +81,11 @@ function on_mouse_wheel(wheel)
     return false
 end
 
+-- 手柄按键事件 (仅按下/松开边沿)。return true = 拦截, false = 放行
+function on_gamepad_btn(code, pressed)
+    return false
+end
+
 -- 周期回调 (主循环限频调用, 1000Hz)。dt_us = 距上次 tick 的微秒差
 function tick(dt_us)
 end
@@ -125,6 +130,8 @@ end
 | `disable_listen_mouse_move()` | 关闭 `on_mouse_move` 监听。 |
 | `enable_listen_mouse_wheel()` | 开启 `on_mouse_wheel` 监听。 |
 | `disable_listen_mouse_wheel()` | 关闭 `on_mouse_wheel` 监听。 |
+| `enable_listen_gamepad_btn(code1, code2, ...)` | 声明 `on_gamepad_btn` 要接收的手柄按键码 (0x01–0x1B, 可多个)。语义同上。 |
+| `disable_listen_gamepad_btn(code1, ...)` | 解除对指定手柄按键码的监听 (variadic)；**无参数则清空全部**。 |
 
 > 通常在顶层调用一次。`disable_*` 便于运行时 (如在某个 `on_key` 里) 临时切换是否接管鼠标。每次脚本重载时所有监听清空，需重新声明。
 
@@ -139,6 +146,7 @@ end
 | `on_mouse_btn(button, down)` | `button`: 0–7; `down`: bool | 同上 | 仅对 `enable_listen_mouse_btn` 声明过的按钮、边沿。 |
 | `on_mouse_move(dx, dy)` | `dx,dy`: 本次相对移动像素 (int, 可正可负) | `true`=拦截 (dx/dy 归零) | 已 `enable_listen_mouse_move` 且有移动时。 |
 | `on_mouse_wheel(wheel)` | `wheel`: 本次滚轮量 (int, 可正可负) | `true`=拦截 (wheel 归零) | 已 `enable_listen_mouse_wheel` 且有滚动时。 |
+| `on_gamepad_btn(code, pressed)` | `code`: 手柄按键码 (0x01–0x1B, 见 [手柄按键码表](#手柄按键码)); `pressed`: bool | `true`=拦截 | 仅对 `enable_listen_gamepad_btn` 声明过的按键、边沿。 |
 | `on_custom_event(str)` | `str`: 字符串, 最大 **128 字节** (WS) / **60 字节** (HID) | `true`=拦截 | 外部通过 WebSocket (CMD 0x01) 或 HID CMD 0xFA 发送文本时触发。**无需 enable_listen**。 |
 | `tick(dt_us)` | `dt_us`: 距上次 tick 的微秒差 | 忽略 | 主循环限频调用, 约 10kHz (0.1ms 一次)。 |
 
@@ -229,6 +237,7 @@ end
 | `input_keyboard(keycode, down)` | `keycode`: HID 键码 (0-254); `down`: bool | 注入键盘按下/释放。keycode 为 0 或 >254 则静默忽略。 |
 | `input_mouse_button(button, down)` | `button`: 0-7; `down`: bool | 注入鼠标按键。button 越界静默忽略。 |
 | `input_mouse_move(dx, dy[, wheel])` | `dx,dy`: 相对位移 (像素); `wheel`: 滚轮 (默认 0) | 注入鼠标移动/滚轮。效果取决于 `map_on`: 映射开→移动视角; 映射关→移动 vmouse。 |
+| `input_gamepad_button(code, down)` | `code`: 手柄按键码 (0x01–0x1B, 见 [手柄按键码表](#手柄按键码)); `down`: bool | 注入手柄按键。code 越界 (≤0 或 >0x1B) 静默忽略。 |
 
 > **注意**: 注入的键事件会**真实修改键状态 bitmap** (`key_state[]`)。若注入 `input_keyboard(0x15, true)` 后未注入对应的 `false`，映射引擎将认为该键一直处于按下状态，导致动作卡在 HOLD 阶段。
 
@@ -424,6 +433,25 @@ touch_up(id)
 | 2 | 中键 |
 | 3 | 后退 |
 | 4 | 前进 |
+
+**手柄按键** (`on_gamepad_btn` 的 `code`):
+
+| 码 | 按键 | 码 | 按键 |
+|----|------|----|------|
+| `0x01` | A / Cross | `0x10` | 十字键 上 |
+| `0x02` | B / Circle | `0x11` | 十字键 下 |
+| `0x03` | X / Square | `0x12` | 十字键 左 |
+| `0x04` | Y / Triangle | `0x13` | 十字键 右 |
+| `0x05` | LB / L1 | `0x14`–`0x1B` | EXTRA_1–8 |
+| `0x06` | RB / R1 | | |
+| `0x07` | LT / L2 | | |
+| `0x08` | RT / R2 | | |
+| `0x09` | SELECT / Back / Share | | |
+| `0x0A` | START / Options | | |
+| `0x0B` | LS / L3 (左摇杆按下) | | |
+| `0x0C` | RS / R3 (右摇杆按下) | | |
+| `0x0D` | HOME / Guide / PS | | |
+| `0x0E` | MISC (触控板 / Mute) | | |
 
 > 完整键码表见 [HID 键码参考](/api/hid-code)。
 
