@@ -135,6 +135,114 @@
       color: #c9a;
     }
 
+    /* ── 手柄可视化 ── */
+    .gpad-viz {
+      display: flex;
+      gap: 14px;
+      margin-top: 8px;
+      align-items: flex-end;
+    }
+
+    .stick-box {
+      text-align: center;
+    }
+
+    .stick-box svg {
+      display: block;
+    }
+
+    .stick-label {
+      color: var(--dim);
+      font-size: 10px;
+      margin-top: 3px;
+    }
+
+    .stick-val {
+      font-size: 10px;
+      color: var(--bright);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    .trig-box {
+      text-align: center;
+      width: 48px;
+    }
+
+    .trig-bar-wrap {
+      width: 22px;
+      height: 72px;
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 3px;
+      position: relative;
+      overflow: hidden;
+      margin: 0 auto;
+    }
+
+    .trig-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, #4a9, #6c6);
+      border-radius: 0 0 2px 2px;
+      transition: height 0.04s linear;
+    }
+
+    .trig-fill.high {
+      background: linear-gradient(to top, #e55, #e84);
+    }
+
+    .trig-label {
+      color: var(--dim);
+      font-size: 10px;
+      margin-top: 3px;
+    }
+
+    .trig-val {
+      font-size: 10px;
+      color: var(--bright);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    /* ── 按钮 bitmap 指示器 ── */
+    #g-btn-viz {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin: 2px;
+      background: #222;
+      border: 1px solid #555;
+      transition: background 0.06s, border-color 0.06s, box-shadow 0.06s;
+    }
+
+    .btn-dot.on {
+      background: #4a9;
+      border-color: #6c6;
+      box-shadow: 0 0 5px rgba(68, 170, 153, 0.5);
+    }
+
+    .btn-sep {
+      display: inline-block;
+      width: 4px;
+      height: 1px;
+      margin: 0 5px;
+    }
+
+    #g-st {
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
     body.grabbed #ui {
       opacity: .55;
     }
@@ -167,6 +275,57 @@
     <label><input type="checkbox" id="opt-unadj" checked> unadjustedMovement（绕过系统鼠标加速曲线）</label>
     <label><input type="checkbox" id="opt-esc-single" checked> 单击 Esc 退出（Keyboard Lock 无需长按）</label>
 
+    <h3>Gamepad</h3>
+    <div style="display:flex;white-space:nowrap"><span class="k">手柄</span><span class="v" id="g-st">未检测到</span></div>
+
+    <div id="g-viz" class="gpad-viz" style="display:none">
+      <!-- 左摇杆 -->
+      <div class="stick-box">
+        <svg id="g-ls-svg" width="72" height="72" viewBox="-36 -36 72 72">
+          <rect x="-36" y="-36" width="72" height="72" rx="4" fill="#222" stroke="#444" stroke-width="1" />
+          <line x1="-32" y1="0" x2="32" y2="0" stroke="#333" stroke-width="1" />
+          <line x1="0" y1="-32" x2="0" y2="32" stroke="#333" stroke-width="1" />
+          <circle cx="0" cy="0" r="9" fill="none" stroke="#3a3a3a" stroke-width="0.8" stroke-dasharray="2 2" />
+          <circle id="g-ls-dot" cx="0" cy="0" r="4.5" fill="#4a9" opacity="0.9" />
+        </svg>
+        <div class="stick-label">LS</div>
+        <div class="stick-val" id="g-ls-val">0,0</div>
+      </div>
+
+      <!-- 右摇杆 -->
+      <div class="stick-box">
+        <svg id="g-rs-svg" width="72" height="72" viewBox="-36 -36 72 72">
+          <rect x="-36" y="-36" width="72" height="72" rx="4" fill="#222" stroke="#444" stroke-width="1" />
+          <line x1="-32" y1="0" x2="32" y2="0" stroke="#333" stroke-width="1" />
+          <line x1="0" y1="-32" x2="0" y2="32" stroke="#333" stroke-width="1" />
+          <circle cx="0" cy="0" r="9" fill="none" stroke="#3a3a3a" stroke-width="0.8" stroke-dasharray="2 2" />
+          <circle id="g-rs-dot" cx="0" cy="0" r="4.5" fill="#4a9" opacity="0.9" />
+        </svg>
+        <div class="stick-label">RS</div>
+        <div class="stick-val" id="g-rs-val">0,0</div>
+      </div>
+
+      <!-- 左扳机 -->
+      <div class="trig-box">
+        <div class="trig-bar-wrap">
+          <div class="trig-fill" id="g-lt-fill" style="height:0%"></div>
+        </div>
+        <div class="trig-label">LT</div>
+        <div class="trig-val" id="g-lt-val">0</div>
+      </div>
+
+      <!-- 右扳机 -->
+      <div class="trig-box">
+        <div class="trig-bar-wrap">
+          <div class="trig-fill" id="g-rt-fill" style="height:0%"></div>
+        </div>
+        <div class="trig-label">RT</div>
+        <div class="trig-val" id="g-rt-val">0</div>
+      </div>
+    </div>
+
+    <div id="g-btn-row" style="display:none"><span class="k">BTN</span><span id="g-btn-viz"></span></div>
+
     <h3>Pipeline</h3>
     <div><span class="k">输入事件速率</span><span class="v" id="p-in">0 Hz</span></div>
     <div><span class="k">HID 发送速率</span><span class="v" id="p-out">0 Hz</span></div>
@@ -176,11 +335,13 @@
     <div><span class="k">帧边界补偿量</span><span class="v" id="p-corr">—</span></div>
     <div><span class="k">丢失位移</span><span class="v ok" id="p-lost">0 px（设计上不可能）</span></div>
     <div><span class="k">发送错误</span><span class="v ok" id="p-err">0</span></div>
+    <div><span class="k">手柄发送速率</span><span class="v" id="p-gout">—</span></div>
 
     <h3>Lua</h3>
     <span class="k">Cmd 0xFA — on_custom_event(str)</span>
     <div style="margin-top:6px;display:flex;gap:4px">
-      <input type="text" id="lua-input" maxlength="62" placeholder="文本发送到设备 Lua…" style="flex:1;padding:4px 8px;font:13px monospace;background:#2a2a2a;border:1px solid #555;border-radius:4px;color:#ccc">
+      <input type="text" id="lua-input" maxlength="62" placeholder="文本发送到设备 Lua…"
+        style="flex:1;padding:4px 8px;font:13px monospace;background:#2a2a2a;border:1px solid #555;border-radius:4px;color:#ccc">
       <button id="btn-lua-send" onclick="sendLua()" disabled>发送</button>
     </div>
     <div><span class="k">状态</span><span class="v" id="lua-st">—</span></div>
@@ -188,7 +349,8 @@
     <div id="hint">
       ① <b>连接 HID</b> → 选择设备。<br>
       ② <b>开始独占</b> → 键鼠被捕获并转发到 Pico。<br>
-      ③ 退出：默认<b>单击 Esc</b>即可退出；关闭「单击 Esc 退出」开关后需<b>长按 Esc</b>。<br>
+      ③ <b>手柄</b> → 即插即用，连接后自动转发（标准映射）。<br>
+      ④ 退出：默认<b>单击 Esc</b>即可退出；关闭「单击 Esc 退出」开关后需<b>长按 Esc</b>。<br>
     </div>
   </div>
 
@@ -209,6 +371,7 @@
     const SUB_ORIENTATION = 0xFB;
     const EVT_ORIENTATION = 0x01;
     const CMD_LUA = 0xFA;    // payload → Lua on_custom_event(str)
+    const CMD_GAMEPAD = 0xF9; // 手柄报文 16B → core_input_gamepad_abs/btn
 
     const MAX_DELTA = 127;
 
@@ -218,6 +381,33 @@
     const txBuf = new Uint8Array(REPORT_SIZE);
     txBuf[0] = H0; txBuf[1] = H1; txBuf[3] = CMD_CORE_INPUT;
     const luaBuf = new Uint8Array(REPORT_SIZE);   // Lua 发送用独立 buffer，不与 txBuf 互斥
+    const gpadBuf = new Uint8Array(REPORT_SIZE);  // 手柄发送用独立 buffer
+
+    // ── 手柄按钮位映射（PIO bit → Standard Gamepad button index）──
+    // 与 pio_device.c pio_gamepad_btn_map 对应，-1 = 无标准映射
+    const GPAD_BTN_COUNT = 20;
+    const GPAD_BTN_MAP = [
+      12, // bit 0:  BTN_DPAD_UP    → std[12]
+      13, // bit 1:  BTN_DPAD_DOWN  → std[13]
+      14, // bit 2:  BTN_DPAD_LEFT  → std[14]
+      15, // bit 3:  BTN_DPAD_RIGHT → std[15]
+      9, // bit 4:  BTN_START      → std[9]
+      8, // bit 5:  BTN_SELECT     → std[8]
+      10, // bit 6:  BTN_LS         → std[10]
+      11, // bit 7:  BTN_RS         → std[11]
+      4, // bit 8:  BTN_LB         → std[4]
+      5, // bit 9:  BTN_RB         → std[5]
+      16, // bit 10: BTN_HOME       → std[16]
+      -1, // bit 11: BTN_MISC       → 无标准映射
+      0, // bit 12: BTN_A          → std[0]
+      1, // bit 13: BTN_B          → std[1]
+      2, // bit 14: BTN_X          → std[2]
+      3, // bit 15: BTN_Y          → std[3]
+      6, // bit 16: BTN_LT 数字    → std[6].value > 0.5
+      7, // bit 17: BTN_RT 数字    → std[7].value > 0.5
+      -1, // bit 18: BTN_EXTRA_1    → 无标准映射
+      -1, // bit 19: BTN_EXTRA_2    → 无标准映射
+    ];
 
     function beginFrame(payloadLen) {
       txBuf.fill(0, 4, 20);
@@ -237,6 +427,23 @@
     function buildTriple(sub, a, b) {
       beginFrame(3);
       txBuf[4] = sub; txBuf[5] = a; txBuf[6] = b;
+    }
+    function buildGamepadReport(ls_x, ls_y, rs_x, rs_y, lt, rt, buttons) {
+      // 16B payload: 6×i16 LE + u32 LE button bitmap
+      gpadBuf.fill(0);
+      gpadBuf[0] = H0; gpadBuf[1] = H1;
+      gpadBuf[2] = 17; // LEN = 1 (CMD) + 16 (payload)
+      gpadBuf[3] = CMD_GAMEPAD;
+      const put = (off, v) => {
+        gpadBuf[off] = v & 0xFF;
+        gpadBuf[off + 1] = (v >> 8) & 0xFF;
+      };
+      put(4, ls_x); put(6, ls_y); put(8, rs_x); put(10, rs_y);
+      put(12, lt); put(14, rt);
+      gpadBuf[16] = buttons & 0xFF;
+      gpadBuf[17] = (buttons >> 8) & 0xFF;
+      gpadBuf[18] = (buttons >> 16) & 0xFF;
+      gpadBuf[19] = (buttons >>> 24) & 0xFF;
     }
     async function sendLua() {
       if (!device || !device.opened) return;
@@ -275,6 +482,50 @@
     let stOut = 0, stIn = 0, stErr = 0, stInflight = 0;
     let stRttSum = 0, stRttN = 0, stRttMax = 0;
     let stCorrSum = 0;
+    let gpadStOut = 0, gpadStErr = 0;
+
+    // ── 手柄状态 ──
+    let gpadList = [];      // [{name, gamepad}] 全部已连接标准手柄
+    let gpadIdx = 0;        // 当前选中索引
+    let gpadAxes = [0, 0, 0, 0, 0, 0], gpadBtns = 0;
+    let gpadActive = false;
+    const btnDots = [];     // 按 PIO bit 位索引，缓存 DOM 引用
+
+    function cleanGpadId(raw) {
+      // 去掉 "(Vendor: XXXX Product: XXXX)" 及 "(STANDARD GAMEPAD ...)"
+      return raw.replace(/\s*\(.*?\).*$/, '').trim();
+    }
+
+    // 按钮显示顺序（物理分组，含 tooltip 标签）
+    // null = 分组间隔
+    const BTN_DISPLAY = [
+      [0, '↑'], [1, '↓'], [2, '←'], [3, '→'], null,
+      [12, 'A'], [13, 'B'], [14, 'X'], [15, 'Y'], null,
+      [8, 'L1'], [9, 'R1'], null,
+      [16, 'L2'], [17, 'R2'], null,
+      [6, 'L3'], [7, 'R3'], null,
+      [4, '▶'], [5, '■'], [10, '⌂'], [11, '✱'], null,
+      [18, 'E1'], [19, 'E2'],
+    ];
+
+    function initBtnViz() {
+      const viz = document.getElementById('g-btn-viz');
+      viz.innerHTML = ''; btnDots.length = 0;
+      BTN_DISPLAY.forEach(item => {
+        if (item === null) {
+          const sep = document.createElement('span');
+          sep.className = 'btn-sep';
+          viz.appendChild(sep);
+        } else {
+          const [bit, label] = item;
+          const dot = document.createElement('span');
+          dot.className = 'btn-dot';
+          dot.title = label;
+          btnDots[bit] = dot;
+          viz.appendChild(dot);
+        }
+      });
+    }
 
     async function flush() {
       if (pumping || !device || !device.opened) return;
@@ -495,6 +746,135 @@
 
     document.addEventListener('contextmenu', (e) => { if (grabbed) e.preventDefault(); });
 
+    // ===========================================================================
+    // 手柄采集（Gamepad API，标准按键映射 → PIO CMD_GAMEPAD 16B 格式）
+    // ===========================================================================
+    function pollGamepad() {
+      if (!navigator.getGamepads) return;
+      const gamepads = navigator.getGamepads();
+
+      // 收集全部已连接手柄（不过滤 mapping 类型）
+      const list = [];
+      for (let i = 0; i < gamepads.length; i++) {
+        const gp = gamepads[i];
+        if (gp && gp.connected)
+          list.push({ name: cleanGpadId(gp.id), gp });
+      }
+
+      const wasActive = gpadActive;
+      const prevN = gpadList.length;
+      gpadList = list;
+      if (gpadIdx >= list.length) gpadIdx = Math.max(0, list.length - 1);
+      gpadActive = list.length > 0;
+      const listChanged = list.length !== prevN;
+
+      // 首次检测到手柄时，自动选中当前有输入（摇杆/按键）的那个
+      if (prevN === 0 && list.length > 0) {
+        let best = 0;
+        for (let i = 0; i < list.length; i++) {
+          const gp = list[i].gp;
+          const active = gp.axes.some(a => Math.abs(a) > 0.1) ||
+            gp.buttons.some(b => b.pressed);
+          if (active) { best = i; break; }
+        }
+        gpadIdx = best;
+      }
+
+      const cur = gpadActive ? gpadList[gpadIdx] : null;
+      if (cur) {
+        const gp = cur.gp;
+
+        // 摇杆: axes[0..3] = LS_X, LS_Y, RS_X, RS_Y  (-1 ~ +1 → ±32767)
+        const ls_x = Math.round((gp.axes[0] || 0) * 32767);
+        const ls_y = Math.round((gp.axes[1] || 0) * 32767);
+        const rs_x = Math.round((gp.axes[2] || 0) * 32767);
+        const rs_y = Math.round((gp.axes[3] || 0) * 32767);
+
+        // 扳机: buttons[6/7].value (analog, 0~1 → 0~32767)
+        const lt = Math.round((gp.buttons[6]?.value || 0) * 32767);
+        const rt = Math.round((gp.buttons[7]?.value || 0) * 32767);
+
+        // 按钮位掩码
+        let btns = 0;
+        for (let i = 0; i < GPAD_BTN_COUNT; i++) {
+          const stdIdx = GPAD_BTN_MAP[i];
+          if (stdIdx < 0 || i === 16 || i === 17) continue;
+          if (gp.buttons[stdIdx]?.pressed) btns |= (1 << i);
+        }
+        // LT/RT 数字位: analog > 0.5 置位
+        if ((gp.buttons[6]?.value || 0) > 0.5) btns |= (1 << 16);
+        if ((gp.buttons[7]?.value || 0) > 0.5) btns |= (1 << 17);
+
+        gpadAxes = [ls_x, ls_y, rs_x, rs_y, lt, rt];
+        gpadBtns = btns;
+
+        // ── 图形化 UI ──
+        const MAX_R = 30; // SVG viewBox ±36, 留 6px margin
+        $('g-ls-dot').setAttribute('cx', (ls_x / 32767) * MAX_R);
+        $('g-ls-dot').setAttribute('cy', (ls_y / 32767) * MAX_R);
+        $('g-ls-val').textContent = ls_x + ',' + ls_y;
+
+        $('g-rs-dot').setAttribute('cx', (rs_x / 32767) * MAX_R);
+        $('g-rs-dot').setAttribute('cy', (rs_y / 32767) * MAX_R);
+        $('g-rs-val').textContent = rs_x + ',' + rs_y;
+
+        const ltPct = Math.round((lt / 32767) * 100);
+        $('g-lt-fill').style.height = ltPct + '%';
+        $('g-lt-fill').classList.toggle('high', ltPct > 75);
+        $('g-lt-val').textContent = lt;
+
+        const rtPct = Math.round((rt / 32767) * 100);
+        $('g-rt-fill').style.height = rtPct + '%';
+        $('g-rt-fill').classList.toggle('high', rtPct > 75);
+        $('g-rt-val').textContent = rt;
+
+        for (let i = 0; i < GPAD_BTN_COUNT; i++) {
+          const dot = btnDots[i];
+          if (dot) dot.classList.toggle('on', !!(btns & (1 << i)));
+        }
+
+        // 发送（不做边沿检测，由 Pico 端 pio_device.c 负责）
+        if (device && device.opened) {
+          buildGamepadReport(ls_x, ls_y, rs_x, rs_y, lt, rt, btns);
+          device.sendReport(REPORT_ID, gpadBuf).then(() => { gpadStOut++; }, () => { gpadStErr++; });
+        }
+      }
+
+      if (wasActive !== gpadActive || listChanged) {
+        $('g-viz').style.display = gpadActive ? '' : 'none';
+        $('g-btn-row').style.display = gpadActive ? '' : 'none';
+        renderStatic();
+      }
+
+      // 在下一帧继续轮询
+      if (gpadRafId === null) gpadRafId = requestAnimationFrame(gamepadLoop);
+    }
+
+    let gpadRafId = null;
+
+    function gamepadLoop() {
+      gpadRafId = null;
+      pollGamepad();
+    }
+
+    // 用户首次按键后触发（Chrome 安全策略）
+    window.addEventListener('gamepadconnected', () => {
+      if (gpadRafId === null) gpadRafId = requestAnimationFrame(gamepadLoop);
+    });
+    window.addEventListener('gamepaddisconnected', () => {
+      gpadActive = false; gpadList = []; gpadIdx = 0;
+      gpadAxes = [0, 0, 0, 0, 0, 0]; gpadBtns = 0;
+      renderStatic();
+    });
+
+    // 无论 gamepadconnected 是否已触发，设备连接后即启动轮询
+    const gpadStartOnDevice = () => {
+      if (gpadRafId === null) gpadRafId = requestAnimationFrame(gamepadLoop);
+    };
+
+    // 页面加载即启动轮询（file:// 下 gamepadconnected 可能不触发）
+    if (navigator.getGamepads) gpadRafId = requestAnimationFrame(gamepadLoop);
+
     function releaseAllHeld() {
       for (const b of heldBtns) postDiscrete(SUB_MOUSE_BUTTON, b, 0);
       for (const k of heldKeys) postDiscrete(SUB_KBD_KEY, k, 0);
@@ -508,6 +888,7 @@
     let kbdLocked = false;
 
     const $ = (id) => document.getElementById(id);
+    initBtnViz(); // 现在 $ 已定义，安全调用
 
     async function acquireGrab() {
       if (!device || !device.opened) return;
@@ -588,6 +969,7 @@
       dev.oninputreport = (e) => parseInput(e.data);
       device = dev;
       clearPipeline();
+      gpadStartOnDevice();
       renderStatic();
     }
 
@@ -659,6 +1041,7 @@
       stOut = stIn = stErr = 0;
       stRttSum = stRttN = stRttMax = 0;
       stCorrSum = 0;
+      gpadStOut = gpadStErr = 0;
       statT0 = performance.now();
     }
     let statT0 = performance.now();
@@ -677,6 +1060,61 @@
 
       $('c-grab').textContent = grabbed ? 'on' : 'off';
       $('c-grab').className = 'v ' + (grabbed ? 'ok' : '');
+
+      // ── 手柄 ──
+      if (gpadActive) {
+        const name = gpadList[gpadIdx] ? gpadList[gpadIdx].name : '';
+        const multi = gpadList.length > 1;
+        $('g-st').textContent = name + (multi ? '🔄' : '');
+        $('g-st').className = 'v ok' + (multi ? '' : '');
+        $('g-st').style.cursor = multi ? 'pointer' : '';
+        $('g-st').title = multi ? ('点击切换 (' + (gpadIdx + 1) + '/' + gpadList.length + ')') : '';
+        $('g-st').onclick = multi ? (() => { gpadIdx = (gpadIdx + 1) % gpadList.length; renderStatic(); }) : null;
+      } else {
+        $('g-st').textContent = '未检测到';
+        $('g-st').className = 'v';
+        $('g-st').style.cursor = '';
+        $('g-st').title = '';
+        $('g-st').onclick = null;
+      }
+
+      const show = gpadActive;
+      $('g-viz').style.display = show ? '' : 'none';
+      $('g-btn-row').style.display = show ? '' : 'none';
+      if (gpadActive) {
+        const MAX_R = 30;
+        $('g-ls-dot').setAttribute('cx', (gpadAxes[0] / 32767) * MAX_R);
+        $('g-ls-dot').setAttribute('cy', (gpadAxes[1] / 32767) * MAX_R);
+        $('g-ls-val').textContent = gpadAxes[0] + ',' + gpadAxes[1];
+        $('g-rs-dot').setAttribute('cx', (gpadAxes[2] / 32767) * MAX_R);
+        $('g-rs-dot').setAttribute('cy', (gpadAxes[3] / 32767) * MAX_R);
+        $('g-rs-val').textContent = gpadAxes[2] + ',' + gpadAxes[3];
+        const ltPct = Math.round((gpadAxes[4] / 32767) * 100);
+        $('g-lt-fill').style.height = ltPct + '%';
+        $('g-lt-fill').classList.toggle('high', ltPct > 75);
+        $('g-lt-val').textContent = gpadAxes[4];
+        const rtPct = Math.round((gpadAxes[5] / 32767) * 100);
+        $('g-rt-fill').style.height = rtPct + '%';
+        $('g-rt-fill').classList.toggle('high', rtPct > 75);
+        $('g-rt-val').textContent = gpadAxes[5];
+        for (let i = 0; i < GPAD_BTN_COUNT; i++) {
+          const dot = btnDots[i];
+          if (dot) dot.classList.toggle('on', !!(gpadBtns & (1 << i)));
+        }
+      } else {
+        $('g-ls-dot').setAttribute('cx', '0'); $('g-ls-dot').setAttribute('cy', '0');
+        $('g-ls-val').textContent = '—';
+        $('g-rs-dot').setAttribute('cx', '0'); $('g-rs-dot').setAttribute('cy', '0');
+        $('g-rs-val').textContent = '—';
+        $('g-lt-fill').style.height = '0%'; $('g-lt-fill').classList.remove('high');
+        $('g-lt-val').textContent = '—';
+        $('g-rt-fill').style.height = '0%'; $('g-rt-fill').classList.remove('high');
+        $('g-rt-val').textContent = '—';
+        for (let i = 0; i < GPAD_BTN_COUNT; i++) {
+          const dot = btnDots[i];
+          if (dot) dot.classList.remove('on');
+        }
+      }
 
       if (!grabbed) {
         $('c-src').textContent = '—'; $('c-src').className = 'v';
@@ -716,6 +1154,13 @@
       $('p-corr').textContent = stCorrSum.toFixed(0) + ' px（越接近0，raw估计越准）';
       $('p-err').textContent = stErr;
       $('p-err').className = 'v ' + (stErr ? 'bad' : 'ok');
+
+      if (gpadActive) {
+        const goutHz = gpadStOut / dt;
+        $('p-gout').textContent = goutHz.toFixed(1) + ' Hz';
+      } else {
+        $('p-gout').textContent = '—';
+      }
 
       if (dt > 1) resetStats();
     }, 250);

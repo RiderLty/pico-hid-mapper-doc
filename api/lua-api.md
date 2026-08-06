@@ -9,7 +9,7 @@ pico-hid-mapper 内置 **Lua 5.4.6** 解释器，让你用脚本自定义按键/
 ## 数据流
 
 ```
-USB HID 设备 / WebSocket / WebHID (键盘/鼠标/自定义事件)
+USB HID 设备 / 手柄 (Gamepad) / WebSocket / WebHID (键盘/鼠标/自定义事件)
       │
       ▼
 映射引擎 (去抖 / 边沿检测)
@@ -1015,3 +1015,4 @@ function tick(dt_us) end
 - **多个键共用一个触点变量** → 会串。用 `touches[keycode]` 表分开管理。
 - **`on_custom_event` 里忘了 `return true`** → core 虽无默认处理，但返回 `false` 表示 "未处理"。
 - **字符串超上限** → `on_custom_event` 的 `str` 会被截断 (WS:128B / HID:60B)。长指令用简短格式或拆分发送。
+- **手柄 SELECT+RS 组合键** → 同时按下 SELECT + RS (右摇杆按下) 会**切换映射开关**（与键盘 Alt+F1~F9 不同，这是开/关切换）。切换时虚拟光标自动显示/隐藏。此行为在 `on_gamepad_btn` 之前执行，Lua **无法拦截**这个组合键。
