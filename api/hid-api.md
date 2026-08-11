@@ -35,7 +35,6 @@ PIO 口切换为 **Device 模式**后，PIO-USB-C 口变为 generic HID 设备�
 | `0xFC` | core_input 调度 | 直接调用映射引擎接口 |
 | `0xFB` | vmouse 状态输出 | 虚拟鼠标状态转发到网络 |
 | `0xFA` | 自定义事件 | 发送文本字符串到 Lua `on_custom_event(str)` |
-| `0xF9` | 手柄报文 | 16B 摇杆+扳机+按键 bitmap → 映射引擎 |
 
 ---
 
@@ -103,6 +102,7 @@ payload[0] = subcmd，之后为对应参数。
 | `0xFE` | `core_input_mouse_button` | button:u8 + down:u8 (2B) | 4 |
 | `0xFC` | `core_input_keyboard` | keycode:u8 + down:u8 (2B) | 4 |
 | `0xFB` | `core_input_orientation` | orientation:u8 (1B) | 3 |
+| `0xF9` | `core_input_gamepad_abs` / `core_input_gamepad_btn` | ls_x:i16 + ls_y:i16 + rs_x:i16 + rs_y:i16 + lt:i16 + rt:i16 + buttons:u32 (16B) | 18 (`0x12`) |
 
 > `down` 字段：0 = 释放，非 0 = 按下。
 
@@ -126,12 +126,12 @@ payload 9 字节，`vmouse_t` 内存二进制。由 Pico **直接转发到网络
 
 ---
 
-## CMD 0xF9 — 手柄报文
+## CMD 0xFC 子命令 0xF9 — 手柄报文
 
 payload 16 字节。将上位机采集的标准手柄状态注入映射引擎，直接调用 `core_input_gamepad_abs` + `core_input_gamepad_btn`。
 
 ```
-55 AA 11 F9 [ls_x:i16 LE] [ls_y:i16 LE] [rs_x:i16 LE] [rs_y:i16 LE] [lt:i16 LE] [rt:i16 LE] [buttons:u32 LE]
+55 AA 12 FC F9 [ls_x:i16 LE] [ls_y:i16 LE] [rs_x:i16 LE] [rs_y:i16 LE] [lt:i16 LE] [rt:i16 LE] [buttons:u32 LE]
 ```
 
 | 偏移 | 字段 | 类型 | 说明 |
@@ -249,7 +249,7 @@ end
 - **命令构造** — 可视化构造上述所有 CMD（触屏/鼠标/键盘/core_input/Lua 事件/手柄报文），一键发送
 - **实时反馈** — 显示 sendReport 往返延迟（RTT），接收设备 IN 端点上报事件
 - **独占模式** — 锁定设备，防止其他应用干扰
-- **手柄可视化** — 采集电脑手柄（Gamepad API），实时显示摇杆位置、扳机力度、按钮状态，并通过 CMD 0xF9 转发
+- **手柄可视化** — 采集电脑手柄（Gamepad API），实时显示摇杆位置、扳机力度、按钮状态，并通过 CMD 0xFC 子命令 0xF9 转发
 
 使用前提：PIO 口切换为 Device 模式，Chrome / Edge 浏览器，PIO-USB-C 口连接电脑。
 
