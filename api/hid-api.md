@@ -79,7 +79,7 @@ payload 8 字节，标准 `mouse_report_x8`。复用 HID 鼠标解析：按键�
 
 ## CMD 0xFD — 键盘报文
 
-payload 8 字节，标准 `keyboard_report_x8`。复用 HID 键盘解析：修饰键边沿 → `core_input_mod_keyboard`；普通键 → `core_input_keyboard`。
+payload 8 字节，标准 `keyboard_report_x8`。复用 HID 键盘解析：修饰键边沿与普通键按下/释放统一走 `core_input_keyboard`（修饰键为 0xE0-0xE7 标准 HID 键码）。
 
 ```
 55 AA 09 FD [modifiers:u8] [reserved:u8] [keys[6]:u8×6]
@@ -101,7 +101,6 @@ payload[0] = subcmd，之后为对应参数。
 |--------|----------|------------------------|-----|
 | `0xFF` | `core_input_mouse_move` | dx:i32 + dy:i32 + wheel:i32 (12B) | 14 (`0x0E`) |
 | `0xFE` | `core_input_mouse_button` | button:u8 + down:u8 (2B) | 4 |
-| `0xFD` | `core_input_mod_keyboard` | button:u8 + down:u8 (2B) | 4 |
 | `0xFC` | `core_input_keyboard` | keycode:u8 + down:u8 (2B) | 4 |
 | `0xFB` | `core_input_orientation` | orientation:u8 (1B) | 3 |
 
