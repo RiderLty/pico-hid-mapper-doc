@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitepress'
-import { copyFileSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,6 +20,18 @@ function syncApiMdDownloads(outDir?: string) {
   }
 }
 
+// WebHID 控制工具（/webhid 页）由主仓库 webctrl/index.html 同步。
+// 本地构建时复制最新内容；CI 单独克隆 doc 仓库、无主仓库时静默跳过（用已提交副本）。
+function syncWebhidTool(outDir?: string) {
+  const src = resolve(ROOT, '..', 'pico-hid-mapper', 'webctrl', 'index.html')
+  if (!existsSync(src)) return
+  const dest = outDir
+    ? resolve(outDir, 'webhid', 'index.html')
+    : resolve(ROOT, 'public', 'webhid', 'index.html')
+  mkdirSync(dirname(dest), { recursive: true })
+  copyFileSync(src, dest)
+}
+
 export default defineConfig({
   lang: 'zh-CN',
   title: 'pico-hid-mapper',
@@ -35,6 +47,7 @@ export default defineConfig({
         name: 'sync-api-md',
         configResolved() {
           syncApiMdDownloads()
+          syncWebhidTool()
         },
       },
     ],
@@ -42,6 +55,7 @@ export default defineConfig({
 
   async buildEnd(siteConfig) {
     syncApiMdDownloads(siteConfig.outDir)
+    syncWebhidTool(siteConfig.outDir)
   },
   description: 'USB HID 映射器 — 将键鼠输入映射为触屏操作',
 
