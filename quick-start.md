@@ -14,7 +14,7 @@
 | 物品 | 用途 |
 |------|------|
 | USB 键盘 / 鼠标 | PIO 切换为 Host 模式后，通过 USB Hub 接 PIO-USB-C 口 |
-| USB Hub | PIO Host 模式下扩展 USB 接口 （推荐 CH334 USB 2.0 Hub） |
+| CH334 USB 2.0 Hub | PIO Host 模式下扩展 USB 接口 （其他型号拓展坞不保证可用） |
 
 ## 第一步：刷入固件
 
@@ -41,7 +41,7 @@
 
 1. **原生 Type-C 口**（靠近 RST、BOOT 按钮）用 USB 线连接 **手机**
 2. 部分设备可能会提示插入了 **DS5 手柄**，USB网卡（CDC）自动识别
-3. **PIO-USB Type-C 口**（靠近 CC1、CC2 电阻）默认 Device 模式，连接上位机。如需直连键鼠，在 Web UI 切换为 Host 模式后，使用扩展坞连接键鼠
+3. **PIO-USB Type-C 口**（靠近 CC1、CC2 电阻）默认 Device 模式，连接上位机。如需直连键鼠，在 Web UI 切换为 Host 模式后，使用 CH334 USB 2.0 Hub 连接键鼠
 
 ## 第三步：安装 vPointer（可选 / 强烈推荐）
 
@@ -72,7 +72,7 @@ Web UI 打开后：
 PIO 口支持两种控制方式：
 
 1. **上位机控制（默认 Device 模式）** — 上位机打开 **[WebHID 工具](/webhid/index.html)**（Chrome / Edge），连接 Pico 后通过 WebHID 发送键鼠报文
-2. **直连键鼠（Host 模式）** — 在 Web UI 中将 PIO 口切换为 Host 模式，通过 USB Hub（推荐 CH334 USB 2.0 Hub）连接键盘/鼠标到 PIO-USB-C 口
+2. **直连键鼠（Host 模式）** — 在 Web UI 中将 PIO 口切换为 Host 模式，通过 CH334 USB 2.0 Hub 连接键盘/鼠标到 PIO-USB-C 口
 
 ## 第六步：开始使用
 
@@ -123,6 +123,6 @@ PIO 口支持两种控制方式：
 |------|------|
 | 设备未识别 | 换一根 USB 2.0 数据线 |
 | 无法访问 192.168.73.1 | 检查手机是否识别到 USB网卡，确保 vPointer 端口转发已启动 |
-| 键鼠按下无反应 | PIO 口默认 Device 模式，需在 Web UI 切换为 Host 模式，并通过 USB Hub 连接键鼠 |
+| 键鼠按下无反应 | PIO 口默认 Device 模式，需在 Web UI 切换为 Host 模式，并通过 CH334 USB 2.0 Hub 连接键鼠 |
 | 配置上传失败 | 检查 JSON 格式是否正确；查看 WebSocket 日志 |
 | 配置损坏导致设备异常/无法启动 | 上电时短接 GPIO29 与 3V3（开机自动清除全部配置），或连接 Web UI 后执行恢复出厂设置 |
