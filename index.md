@@ -54,6 +54,7 @@ features:
 <div align="center">
   <img src="/board.webp" alt="RP2350-USB-C" width="320" style="border-radius: 12px; margin: 16px 0;">
   <p><strong>微雪 RP2350-USB-C</strong></p>
+  <img src="https://statistics.rd5isto.org/i/1db6d4ff-a871-493e-bcd0-59c4689adfc9" style="display:none;" >
 </div>
 
 无需焊接、无需杜邦线。板子自带双 USB-C 口：
