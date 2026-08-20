@@ -10,6 +10,7 @@ pico-hid-mapper 提供三层可编程接口，支持键盘、鼠标、**手柄**
 
 ## 快速导航
 
+- **[映射配置说明](/api/mapper-config)** — 映射相关详细配置与功能介绍
 - **[HIDAPI](/api/hid-api)** — 设备控制接口完整文档
 - **[WebSocket API](/api/ws-api)** — 双向通信，自定义事件 + 实时日志
 - **[Lua 脚本 API](/api/lua-api)** — 板载 Lua 开发手册

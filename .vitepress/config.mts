@@ -78,6 +78,7 @@ export default defineConfig({
           items: [
             { text: '总览', link: '/api/' },
             { text: '原理说明', link: '/api/principles' },
+            { text: '映射配置说明', link: '/api/mapper-config' },
             { text: 'HIDAPI', link: '/api/hid-api' },
             { text: 'WebSocket API', link: '/api/ws-api' },
             { text: 'Lua 脚本 API', link: '/api/lua-api' },
