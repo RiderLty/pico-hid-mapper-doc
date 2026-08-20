@@ -256,9 +256,11 @@
     <img src="https://statistics.rd5isto.org/i/61625ae4-0be7-428e-be45-9d431ccb5396" style="display:none;">
     <h3>Device</h3>
     <div><span class="k">状态</span><span class="v bad" id="d-st">未连接</span></div>
+    <div><span class="k">连接类型</span><span class="v" id="d-type">—</span></div>
     <div><span class="k">orientation</span><span class="v" id="d-or">—</span></div>
     <div>
       <button id="btn-conn" class="primary">连接 HID</button>
+      <button id="btn-serial" class="primary">连接串口</button>
       <button id="btn-disc" class="danger" disabled>断开</button>
     </div>
 
@@ -347,7 +349,7 @@
     <div><span class="k">状态</span><span class="v" id="lua-st">—</span></div>
 
     <div id="hint">
-      ① <b>连接 HID</b> → 选择设备。<br>
+      ① <b>连接 HID</b> 或 <b>连接串口</b> → 选择设备（串口波特率 921600）。<br>
       ② <b>开始独占</b> → 键鼠被捕获并转发到 Pico。<br>
       ③ <b>手柄</b> → 即插即用，连接后自动转发（标准映射）。<br>
       ④ 退出：默认<b>单击 Esc</b>即可退出；关闭「单击 Esc 退出」开关后需<b>长按 Esc</b>。<br>
@@ -459,7 +461,11 @@
       luaBuf[3] = CMD_LUA;
       luaBuf.set(payload, 4);
       try {
-        await device.sendReport(REPORT_ID, luaBuf);
+        if (device.isSerial) {
+          await sendSerial(luaBuf);
+        } else {
+          await device.sendReport(REPORT_ID, luaBuf);
+        }
         $('lua-input').value = '';
         $('lua-st').textContent = '已发送';
         $('lua-st').className = 'v ok';
@@ -545,7 +551,13 @@
 
           const t = performance.now();
           stInflight = 1;
-          await device.sendReport(REPORT_ID, txBuf);
+
+          // 根据连接类型发送
+          if (device.isSerial) {
+            await sendSerial(txBuf);
+          } else {
+            await device.sendReport(REPORT_ID, txBuf);
+          }
           stInflight = 0;
 
           const rtt = performance.now() - t;
@@ -805,6 +817,13 @@
         if ((gp.buttons[6]?.value || 0) > 0.5) btns |= (1 << 16);
         if ((gp.buttons[7]?.value || 0) > 0.5) btns |= (1 << 17);
 
+        // 检查状态是否变化
+        const stateChanged =
+          ls_x !== gpadAxes[0] || ls_y !== gpadAxes[1] ||
+          rs_x !== gpadAxes[2] || rs_y !== gpadAxes[3] ||
+          lt !== gpadAxes[4] || rt !== gpadAxes[5] ||
+          btns !== gpadBtns;
+
         gpadAxes = [ls_x, ls_y, rs_x, rs_y, lt, rt];
         gpadBtns = btns;
 
@@ -833,10 +852,13 @@
           if (dot) dot.classList.toggle('on', !!(btns & (1 << i)));
         }
 
-        // 发送（不做边沿检测，由 Pico 端 pio_device.c 负责）
-        if (device && device.opened) {
+        // 仅在设备连接且状态变化时发送
+        if (device && device.opened && stateChanged) {
           buildGamepadReport(ls_x, ls_y, rs_x, rs_y, lt, rt, btns);
-          device.sendReport(REPORT_ID, gpadBuf).then(() => { gpadStOut++; }, () => { gpadStErr++; });
+          const sendPromise = device.isSerial
+            ? sendSerial(gpadBuf)
+            : device.sendReport(REPORT_ID, gpadBuf);
+          sendPromise.then(() => { gpadStOut++; }, () => { gpadStErr++; });
         }
       }
 
@@ -941,6 +963,145 @@
     $('btn-grab').onclick = () => (grabbed ? releaseGrab() : acquireGrab());
 
     // ===========================================================================
+    // 串口支持
+    // ===========================================================================
+    let serialPort = null;
+    let serialReader = null;
+    let serialWriter = null;
+    const SERIAL_BAUDRATE = 921600;
+
+    // 串口接收缓冲区
+    let serialRxBuf = new Uint8Array(256);
+    let serialRxLen = 0;
+
+    async function attachSerial(port) {
+      try {
+        await port.open({ baudRate: SERIAL_BAUDRATE });
+        serialPort = port;
+        serialReader = port.readable.getReader();
+        serialWriter = port.writable.getWriter();
+
+        // 重置接收缓冲区
+        serialRxLen = 0;
+
+        // 启动读取循环
+        readSerialLoop();
+
+        device = { opened: true, isSerial: true };
+        clearPipeline();
+        gpadStartOnDevice();
+        renderStatic();
+      } catch (err) {
+        console.error('串口打开失败:', err);
+        throw err;
+      }
+    }
+
+    async function readSerialLoop() {
+      try {
+        while (serialPort && serialReader) {
+          const { value, done } = await serialReader.read();
+          if (done) break;
+          if (value && value.length > 0) {
+            // 解析接收到的数据
+            for (let i = 0; i < value.length; i++) {
+              const byte = value[i];
+
+              // 检测帧头 0x55 0xAA
+              if (serialRxLen === 0 && byte === 0x55) {
+                serialRxBuf[serialRxLen++] = byte;
+              } else if (serialRxLen === 1) {
+                if (byte === 0xAA) {
+                  serialRxBuf[serialRxLen++] = byte;
+                } else {
+                  // 不是 0xAA，重置
+                  serialRxLen = 0;
+                  if (byte === 0x55) {
+                    serialRxBuf[serialRxLen++] = byte;
+                  }
+                }
+              } else if (serialRxLen === 2) {
+                // LEN 字段
+                serialRxBuf[serialRxLen++] = byte;
+              } else if (serialRxLen > 2) {
+                serialRxBuf[serialRxLen++] = byte;
+
+                // 检查是否接收完整
+                const expectedLen = serialRxBuf[2]; // LEN = CMD + PAYLOAD
+                if (serialRxLen >= 3 + expectedLen) {
+                  // 完整帧，处理
+                  const frame = serialRxBuf.slice(0, serialRxLen);
+                  parseSerialFrame(frame);
+                  serialRxLen = 0;
+                }
+              }
+
+              // 防止缓冲区溢出
+              if (serialRxLen >= 256) {
+                serialRxLen = 0;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('串口读取错误:', err);
+      }
+    }
+
+    function parseSerialFrame(frame) {
+      // 解析二进制帧（与 HID parseInput 类似）
+      const dv = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+      if (frame.length < 4) return;
+      if (frame[0] !== H0 || frame[1] !== H1) return;
+
+      const L = frame[2];
+      if (L < 1 || 3 + L > frame.length) return;
+
+      const evt = frame[3];
+      if (evt === EVT_ORIENTATION && L >= 2) {
+        orient = frame[4];
+        renderStatic();
+      }
+
+      // 其他事件类型可在此扩展
+      console.log('串口收到帧:', Array.from(frame.slice(0, Math.min(frame.length, 16))).map(b => b.toString(16).padStart(2, '0')).join(' '));
+    }
+
+    async function sendSerial(data) {
+      if (!serialWriter) return;
+      try {
+        // await serialWriter.write(data);
+        const frameLen = 3 + data[2];
+        await serialWriter.write(data.slice(0, frameLen));
+      } catch (err) {
+        console.error('串口发送失败:', err);
+        stErr++;
+      }
+    }
+
+    async function detachSerial() {
+      if (grabbed) releaseGrab();
+
+      if (serialReader) {
+        await serialReader.cancel().catch(() => { });
+        serialReader = null;
+      }
+      if (serialWriter) {
+        await serialWriter.releaseLock();
+        serialWriter = null;
+      }
+      if (serialPort) {
+        await serialPort.close().catch(() => { });
+        serialPort = null;
+      }
+
+      serialRxLen = 0;
+      device = null;
+      clearPipeline();
+      renderStatic();
+    }
+
+    // ===========================================================================
     // WebHID
     // ===========================================================================
     let orient = 0;
@@ -968,6 +1129,7 @@
       if (!dev.opened) await dev.open();
       dev.oninputreport = (e) => parseInput(e.data);
       device = dev;
+      device.isSerial = false;
       clearPipeline();
       gpadStartOnDevice();
       renderStatic();
@@ -980,9 +1142,13 @@
       heldBtns.clear(); heldKeys.clear();
     }
 
-    function detachDevice() {
+    async function detachDevice() {
       if (grabbed) releaseGrab();
       if (device) {
+        if (device.isSerial) {
+          await detachSerial();
+          return;
+        }
         device.oninputreport = null;
         device.close().catch(() => { });
       }
@@ -1021,8 +1187,32 @@
         }
         if (!dev) return;
         await attachDevice(dev);
+        $('d-st').textContent = '已连接';
+        $('d-st').className = 'v ok';
       } catch (err) {
         console.error('连接失败:', err);
+        $('d-st').textContent = 'ERR: ' + err.message;
+        $('d-st').className = 'v bad';
+      }
+    };
+
+    $('btn-serial').onclick = async () => {
+      if (!navigator.serial) {
+        $('d-st').textContent = 'Web Serial API 不可用';
+        $('d-st').className = 'v bad';
+        return;
+      }
+      try {
+        const port = await navigator.serial.requestPort();
+        await attachSerial(port);
+        $('d-st').textContent = '已连接';
+        $('d-st').className = 'v ok';
+      } catch (err) {
+        // 用户取消选择时，err.name === 'NotFoundError'，静默处理
+        if (err.name === 'NotFoundError') {
+          return;
+        }
+        console.error('串口连接失败:', err);
         $('d-st').textContent = 'ERR: ' + err.message;
         $('d-st').className = 'v bad';
       }
@@ -1050,8 +1240,10 @@
       const on = !!(device && device.opened);
       $('d-st').textContent = on ? '已连接' : '未连接';
       $('d-st').className = 'v ' + (on ? 'ok' : 'bad');
+      $('d-type').textContent = on ? (device.isSerial ? '串口 (921600)' : 'HID') : '—';
       $('d-or').textContent = on ? orient : '—';
       $('btn-conn').disabled = on;
+      $('btn-serial').disabled = on;
       $('btn-disc').disabled = !on;
       $('btn-grab').disabled = !on;
       $('btn-lua-send').disabled = !on;
@@ -1171,6 +1363,10 @@
       $('hint').innerHTML = '<b>WebHID 不可用。</b>需要 Chrome/Edge 89+ 且运行在 secure context（HTTPS 或 localhost）。';
     } else {
       renderStatic();
+    }
+
+    if (!navigator.serial) {
+      $('btn-serial').disabled = true;
     }
   </script>
 </body>
