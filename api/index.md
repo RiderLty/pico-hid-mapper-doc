@@ -7,6 +7,7 @@ pico-hid-mapper 提供三层可编程接口，支持键盘、鼠标、**手柄**
 | **HIDAPI** | HID OUT/IN 端点 | 发送命令帧控制设备（含手柄报文 CMD 0xF9）、接收设备事件 |
 | **WebSocket API** | ws://[ip]/ws | 自定义事件 + 实时日志双向通信 |
 | **Lua 脚本 API** | 固件内 Lua 5.4.6 | 自定义按键行为、编写宏、拦截映射事件、处理手柄输入 |
+| **MAKCU** | UART 串口（GPIO2/3，921600） | 上位机键鼠控制协议（文本 + V2 二进制） |
 
 ## 快速导航
 
@@ -14,6 +15,7 @@ pico-hid-mapper 提供三层可编程接口，支持键盘、鼠标、**手柄**
 - **[HIDAPI](/api/hid-api)** — 设备控制接口完整文档
 - **[WebSocket API](/api/ws-api)** — 双向通信，自定义事件 + 实时日志
 - **[Lua 脚本 API](/api/lua-api)** — 板载 Lua 开发手册
+- **[MAKCU 使用说明](/api/makcu-api)** — 串口上位机键鼠控制（文本 + V2 二进制）
 - **[HID 键码参考](/api/hid-code)** — 完整 HID 键盘/鼠标键码速查表
 
 > 💡 **提示**：每个 API 参考页面均可下载对应的 Markdown 源文件，将文档喂给 AI 工具（如 Claude、ChatGPT 等），可快速生成 Lua 脚本、HID 命令帧或 WebSocket 通信代码。

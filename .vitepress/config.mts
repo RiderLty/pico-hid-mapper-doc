@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 /** 需要在 public/api/ 中提供下载的 API 参考 .md 文件 */
-const API_MD_DOWNLOADS = ['hid-api.md', 'lua-api.md', 'ws-api.md', 'hid-code.md']
+const API_MD_DOWNLOADS = ['hid-api.md', 'lua-api.md', 'ws-api.md', 'hid-code.md', 'makcu-api.md']
 
 const ROOT = resolve(__dirname, '..')
 
@@ -82,6 +82,7 @@ export default defineConfig({
             { text: 'HIDAPI', link: '/api/hid-api' },
             { text: 'WebSocket API', link: '/api/ws-api' },
             { text: 'Lua 脚本 API', link: '/api/lua-api' },
+            { text: 'MAKCU 使用说明', link: '/api/makcu-api' },
             { text: 'HID 键码参考', link: '/api/hid-code' },
           ],
         },

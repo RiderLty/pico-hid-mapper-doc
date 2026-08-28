@@ -118,6 +118,7 @@ PIO 口支持两种控制方式：
 - 了解 [HIDAPI](/api/hid-api)，可自行编码实现自定义上位机控制设备
 - 学习 [Lua 脚本](/api/lua-api) 编写自定义宏，实现压枪、连招、一键丢弃等高级功能
 - 通过 [WebSocket API](/api/ws-api) 或 [HIDAPI](/api/hid-api#cmd-0xfa-自定义事件) 向 Lua 发送自定义指令，实现外部程序联动
+- 使用 [MAKCU 串口控制](/api/makcu-api)，通过 USB-TTL 连接 GPIO2/3 串口，用文本或 V2 二进制协议远程控制键鼠（配合 makcu-py-lib 上位机库）
 
 ## 常见问题
 

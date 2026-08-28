@@ -997,27 +997,47 @@
       }
     }
 
+
+
+    let serialTextBuf = [];           // 文本接收缓冲区
+    const textDecoder = new TextDecoder(); // 用于将字节数组解码为字符串
+
+
     async function readSerialLoop() {
       try {
         while (serialPort && serialReader) {
           const { value, done } = await serialReader.read();
           if (done) break;
           if (value && value.length > 0) {
-            // 解析接收到的数据
             for (let i = 0; i < value.length; i++) {
               const byte = value[i];
 
-              // 检测帧头 0x55 0xAA
-              if (serialRxLen === 0 && byte === 0x55) {
-                serialRxBuf[serialRxLen++] = byte;
-              } else if (serialRxLen === 1) {
-                if (byte === 0xAA) {
+              // ===== 二进制帧解析 =====
+              if (serialRxLen === 0) {
+                if (byte === 0x55) {
+                  // 可能是二进制帧头，先暂存
                   serialRxBuf[serialRxLen++] = byte;
                 } else {
-                  // 不是 0xAA，重置
+                  // 非二进制数据，按文本处理
+                  handleTextByte(byte);
+                }
+              } else if (serialRxLen === 1) {
+                if (byte === 0xAA) {
+                  // 确认二进制帧头 0x55 0xAA
+                  // 之前累积的文本视为噪音，丢弃
+                  serialTextBuf = [];
+                  serialRxBuf[serialRxLen++] = byte;
+                } else {
+                  // 不是 0xAA，说明之前的 0x55 属于文本
                   serialRxLen = 0;
+                  handleTextByte(0x55);
+
+                  // 继续处理当前字节
                   if (byte === 0x55) {
+                    // 当前字节可能是新的帧头
                     serialRxBuf[serialRxLen++] = byte;
+                  } else {
+                    handleTextByte(byte);
                   }
                 }
               } else if (serialRxLen === 2) {
@@ -1036,7 +1056,7 @@
                 }
               }
 
-              // 防止缓冲区溢出
+              // 防止二进制缓冲区溢出
               if (serialRxLen >= 256) {
                 serialRxLen = 0;
               }
@@ -1045,6 +1065,27 @@
         }
       } catch (err) {
         console.error('串口读取错误:', err);
+      }
+    }
+
+    // ===== 文本字节处理函数 =====
+    function handleTextByte(byte) {
+      if (byte === 0x0D || byte === 0x0A) { // \r 或 \n
+        // 遇到换行，输出当前行
+        if (serialTextBuf.length > 0) {
+          const str = textDecoder.decode(new Uint8Array(serialTextBuf));
+          console.log(str);
+          serialTextBuf = [];
+        }
+      } else {
+        serialTextBuf.push(byte);
+
+        // 超过 256 字节，强制打印并清空
+        if (serialTextBuf.length >= 256) {
+          const str = textDecoder.decode(new Uint8Array(serialTextBuf));
+          console.log(str);
+          serialTextBuf = [];
+        }
       }
     }
 

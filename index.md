@@ -38,6 +38,9 @@ features:
   - icon: 🛠️
     title: WebHID 控制
     details: 基于WebHID API的上位机控制工具，在浏览器中直接使用。
+  - icon: 🎮
+    title: MAKCU 键鼠控制
+    details: 通过 UART 串口远程控制键鼠，支持文本与 V2 二进制协议，兼容 makcu-py-lib 生态。
 ---
 
 ## 它能做什么？
