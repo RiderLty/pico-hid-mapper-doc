@@ -199,7 +199,7 @@ end
 
 | 函数 | 返回 / 参数 | 说明 |
 |------|-------------|------|
-| `get_key_map(code)` | `code`: unified keycode (0-254=HID 键盘键, 0x100+鼠标按键) | `idx, type, flags, coord_count, interval_count` / 无映射返回 **nil**。`type`: 0=PRESS, 1=MULT_PRESS, 2=SMART_TOGGLE, 3=WHEEL, 4=CLICK, 5=AUTO_FIRE, 6=DRAG。`flags`: bit0=RELEASE_MOUSE, bit1=SEPARAT, bit2=TOUCH。 |
+| `get_key_map(code)` | `code`: unified keycode (0-254=HID 键盘键, 0x100+鼠标按键) | `idx, type, flags, coord_count, interval_count` / 无映射返回 **nil**。`type`: 0=PRESS, 1=MULT_PRESS, 2=SMART_TOGGLE, 3=WHEEL, 4=CLICK, 5=AUTO_FIRE, 6=DRAG, 7=TOGGLE。`flags` 按 type 划分命名空间: SMART_TOGGLE bit0=RELEASE_MOUSE, bit1=SEPARAT, bit2=TOUCH; WHEEL bit0=松开后关闭映射 (RELEASE_MAP_OFF)。 |
 | `get_key_map_by_index(idx)` | `idx`: 直接 key_maps 索引 (0-31) | `code, type, flags, coord_count, interval_count, coord_start, interval_start` / 越界返回 **nil**。用于遍历全部映射。 |
 | `get_key_coord(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `x, y, r_px` (触控坐标 + 像素级随机半径) / 越界返回三个 **nil**。 |
 | `get_key_interval(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `interval_ms` (毫秒) / 越界返回 **nil**。AUTO_FIRE 时 `step=0`=on_ms, `step=1`=off_ms。 |
@@ -300,7 +300,7 @@ input_mouse_move(100, 0)
 |------|------|------|
 | `get_wheel_start_pos()` | `x, y` | 轮盘中心坐标。 |
 | `get_wheel_range()` | `range, shift_range` | 普通半径 / shift 疾跑半径。 |
-| `get_wheel_shift_range_type()` | `enable, hold_or_click` | `enable` = 是否开启 shift 疾跑; `hold_or_click` = `true` 切换 (toggle) / `false` 按住 (hold)。 |
+| `get_wheel_shift_range_type()` | `enable, hold_or_click, keep_on_released` | `enable` = 是否开启 shift 疾跑; `hold_or_click` = `true` 切换 (toggle) / `false` 按住 (hold); `keep_on_released` = 切换模式下松开 WASD 是否保持疾跑状态 (仅 toggle 模式有意义)。 |
 
 ---
 
