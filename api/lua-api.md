@@ -200,7 +200,7 @@ end
 | 函数 | 返回 / 参数 | 说明 |
 |------|-------------|------|
 | `get_key_map(code)` | `code`: unified keycode (0-254=HID 键盘键, 0x100+鼠标按键) | `idx, type, flags, coord_count, interval_count` / 无映射返回 **nil**。`type`: 0=PRESS, 1=MULT_PRESS, 2=SMART_TOGGLE, 3=WHEEL, 4=CLICK, 5=AUTO_FIRE, 6=DRAG, 7=TOGGLE。`flags` 按 type 划分命名空间: SMART_TOGGLE bit0=RELEASE_MOUSE, bit1=SEPARAT, bit2=TOUCH; WHEEL bit0=松开后关闭映射 (RELEASE_MAP_OFF)。 |
-| `get_key_map_by_index(idx)` | `idx`: 直接 key_maps 索引 (0-31) | `code, type, flags, coord_count, interval_count, coord_start, interval_start` / 越界返回 **nil**。用于遍历全部映射。 |
+| `get_key_map_by_index(idx)` | `idx`: 直接 key_maps 索引 (0-63) | `code, type, flags, coord_count, interval_count, coord_start, interval_start` / 越界返回 **nil**。用于遍历全部映射。 |
 | `get_key_coord(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `x, y, r_px` (触控坐标 + 像素级随机半径) / 越界返回三个 **nil**。 |
 | `get_key_interval(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `interval_ms` (毫秒) / 越界返回 **nil**。AUTO_FIRE 时 `step=0`=on_ms, `step=1`=off_ms。 |
 
@@ -218,7 +218,7 @@ if idx then
 end
 
 -- 遍历全部映射
-for i = 0, 31 do
+for i = 0, 63 do
     local code, typ = get_key_map_by_index(i)
     if code and code ~= 0 then
         print(string.format("idx=%d code=0x%x type=%d", i, code, typ))
@@ -256,11 +256,12 @@ input_mouse_move(100, 0)
 
 ---
 
-## 槽位查询
+## 槽位操作
 
 | 函数 | 返回 | 说明 |
 |------|------|------|
 | `get_current_slot()` | `int` (0-8) | 当前激活的配置槽位索引。恒返回 0-8 有效值。 |
+| `set_current_slot(idx)` | 无 | 切换到槽位 `idx` (0-8)。非法值或空槽时保持当前槽位不变；目标槽为当前槽时自动跳过。请求异步应用且按 **200ms** 间隔限频——快速连切时仅最后一次生效，调用后立即 `get_current_slot()` 可能仍返回旧值。效果与热键 `Alt+F1~F9` 一致（F1 = 槽 0）。 |
 
 ---
 
