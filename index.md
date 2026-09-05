@@ -68,5 +68,10 @@ features:
 
 **群友定制 RP2350A 键鼠映射板** — 有群友把本项目会用到的接口集成到了一块自制板子上：键鼠主机口、GPIO8 扩展 USB 主机口（可外接第二个键鼠设备），以及 MAKCU 串口的板载 USB 转串口（连接上位机时免自行焊接，也无需 USB-TTL 适配器）。固件刷写方式与微雪板一致。
 
+<div align="center">
+  <img src="/custom-board-1.jpg" alt="群友定制 RP2350A 键鼠映射板 实拍" width="360" style="border-radius: 12px; margin: 8px; vertical-align: middle;">
+  <img src="/custom-board-2.jpg" alt="群友定制 RP2350A 键鼠映射板 接口" width="560" style="border-radius: 12px; margin: 8px; vertical-align: middle;">
+</div>
+
 👉 购买：[【闲鱼】自制RP2350A键鼠映射硬件板](https://m.tb.cn/h.8LxDIrl?tk=uGqUT5wZoPk)
 
