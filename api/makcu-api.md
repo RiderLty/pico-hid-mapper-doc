@@ -18,6 +18,8 @@ Pico 的 UART0 固定为 **921600 波特率**，通过 USB-TTL 适配器与上�
 
 > ⚠️ 适配器的 **RX** 接 Pico 的 **GPIO2**（TX），适配器的 **TX** 接 Pico 的 **GPIO3**（RX），两者 GND 共地。
 
+> 💡 群友定制的 [RP2350A 键鼠映射板](https://m.tb.cn/h.8LxDIrl?tk=uGqUT5wZoPk)已将本串口经板载 USB 转串口引出，用 USB 线直接连接上位机即可，无需 USB-TTL 适配器。
+
 也可使用浏览器端 [WebHID 工具](/webhid) 的「串口」模式连接（波特率选择 921600）。
 
 ---
