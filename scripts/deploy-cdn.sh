@@ -28,7 +28,8 @@ fi
 if [ -n "$1" ]; then
   DIST_DIR="$1"
 elif [ -f "$PROJECT_DIR/.vitepress/config.mts" ]; then
-  OUTDIR=$(grep -oP "outDir\s*:\s*['\"]\K[^'\"]+" "$PROJECT_DIR/.vitepress/config.mts" 2>/dev/null || echo ".vitepress/dist")
+  # macOS 自带 BSD grep 不支持 -oP，改用 node 解析（与 cdn-postbuild.mjs 同一正则）
+  OUTDIR=$(node -e "const c=require('fs').readFileSync(process.argv[1],'utf8');const m=c.match(/outDir\s*:\s*['\"]([^'\"]+)['\"]/);console.log(m?m[1]:'.vitepress/dist')" "$PROJECT_DIR/.vitepress/config.mts" 2>/dev/null || echo ".vitepress/dist")
   DIST_DIR="$PROJECT_DIR/$OUTDIR"
 else
   DIST_DIR="$PROJECT_DIR/.vitepress/dist"
@@ -37,14 +38,25 @@ fi
 echo "=== 部署静态资源到 CDN ==="
 echo ""
 
+# 该 CDN 偶发 TLS 握手被重置（curl 非零退出、code=000），单请求最多重试 8 次
+webdav_code() {
+  local attempt code
+  for attempt in 1 2 3 4 5 6 7 8; do
+    code=$(curl -s -u "${WEBDAV_USER}:${WEBDAV_PASS}" "$@" \
+      --connect-timeout 5 --max-time 15 -o /dev/null -w "%{http_code}" || true)
+    case "$code" in
+      000|5*) [ "$attempt" -lt 8 ] && sleep 1 ;;
+      *) break ;;
+    esac
+  done
+  echo "$code"
+}
+
 # 创建目录
 echo "--- 创建目录 ---"
 find "$DIST_DIR" -type d ! -name '.' | while read dir; do
   dirpath="${dir#$DIST_DIR/}"
-  code=$(curl -s -u "${WEBDAV_USER}:${WEBDAV_PASS}" \
-    -X MKCOL "${WEBDAV_URL}/${dirpath}" \
-    --connect-timeout 5 --max-time 10 \
-    -o /dev/null -w "%{http_code}")
+  code=$(webdav_code -X MKCOL "${WEBDAV_URL}/${dirpath}")
   echo "  [$code] $dirpath"
 done
 
@@ -57,10 +69,7 @@ find "$DIST_DIR" -type f \
      -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.gif' -o -name '*.ico' \) \
   | sort | while read file; do
   webpath="${file#$DIST_DIR/}"
-  code=$(curl -s -u "${WEBDAV_USER}:${WEBDAV_PASS}" \
-    -T "$file" "${WEBDAV_URL}/${webpath}" \
-    --connect-timeout 5 --max-time 15 \
-    -o /dev/null -w "%{http_code}")
+  code=$(webdav_code -T "$file" "${WEBDAV_URL}/${webpath}")
   if [ "$code" = "201" ] || [ "$code" = "204" ]; then
     echo "  [OK] $webpath"
   else
