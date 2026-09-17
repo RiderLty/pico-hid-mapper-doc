@@ -22,7 +22,7 @@ Lua 引擎 (bitmap 过滤: 只有你声明监听的键/事件才进入 Lua VM)
       ▼
 你的 Lua 脚本
   on_key / on_mouse_btn / on_mouse_move / on_mouse_wheel
-  on_custom_event / tick
+  on_custom_event / on_boot_button / tick
       │  返回 true = 拦截, false = 放行
       ▼
 触摸事件队列 → USB HID 触屏 → 上位机 (手机/电脑)
@@ -33,6 +33,12 @@ Lua 引擎 (bitmap 过滤: 只有你声明监听的键/事件才进入 Lua VM)
 ```
 Web 前端 / LuaEditorDialog → WebSocket CMD 0x01 → ws_ipc → lua_binder_on_custom_event
 webctrl WebHID 工具         → HID OUT CMD 0xFA    → pio_device → lua_binder_on_custom_event
+```
+
+板载 BOOTSEL 按键路径（触发 `on_boot_button(pressed)`）：
+
+```
+core0 BOOTSEL 消抖轮询 (10ms 采样, 连续 3 次一致) → 引擎 IPC → lua_binder_on_boot_button
 ```
 
 > 关键：脚本运行在输入热路径上，返回 `true` 会"吃掉"事件让 core 不再做默认处理，返回 `false` 则原样放行。
@@ -94,6 +100,10 @@ end
 function on_custom_event(str)
     return false
 end
+
+-- 板载 BOOTSEL 按键事件 (按下/松开边沿, 无需声明监听)
+function on_boot_button(pressed)
+end
 ```
 
 ---
@@ -148,6 +158,7 @@ end
 | `on_mouse_wheel(wheel)` | `wheel`: 本次滚轮量 (int, 可正可负) | `true`=拦截 (wheel 归零) | 已 `enable_listen_mouse_wheel` 且有滚动时。 |
 | `on_gamepad_btn(code, pressed)` | `code`: 手柄按键码 (0x01–0x1B, 见 [手柄按键码表](#手柄按键码)); `pressed`: bool | `true`=拦截 | 仅对 `enable_listen_gamepad_btn` 声明过的按键、边沿。 |
 | `on_custom_event(str)` | `str`: 字符串, 最大 **128 字节** (WS) / **60 字节** (HID) | `true`=拦截 | 外部通过 WebSocket (CMD 0x01) 或 HID CMD 0xFA 发送文本时触发。**无需 enable_listen**。 |
+| `on_boot_button(pressed)` | `pressed`: bool (true=按下, false=松开) | 忽略 | 板载 BOOTSEL 按键状态变化时触发 (固件消抖确认, 约 20–30ms 延迟)。**无需 enable_listen**, 无拦截语义, 仅定义了此函数的脚本才会收到事件。 |
 | `tick(dt_us)` | `dt_us`: 距上次 tick 的微秒差 | 忽略 | 主循环限频调用, 约 10kHz (0.1ms 一次)。 |
 
 **拦截语义 (重要)**：
@@ -466,7 +477,7 @@ touch_up(id)
 - **数字是 32 位** (固件设了 `LUA_32BITS`): 整数 int32、浮点 float32。别用超过 2^31 的整数。
 - **单核单线程** (引擎在 core1，同核串行): 脚本内无需考虑并发。
 - **没有阻塞 sleep**: 回调必须立刻返回。如果需要使用sleep，用**协程** (见下文)。
-- **单次调用有 20 万条指令上限**: 超限即抛错，回调被中断，日志报 `script exceeded 200000 instruction step limit`。正常回调只有几十~几百条指令。
+- **单次进入 VM 有 10ms 墙钟预算**: 固件每 2 万条指令轮询一次执行耗时，单次回调（含该次回调内恢复运行的所有协程分片）累计超过 10ms 即抛错中断，日志报 `script exceeded 10000us step budget (infinite loop?)`。正常回调只有几十~几百条指令（微秒级）；协程每片都极短，长期运行不受影响。真正的死循环（如 `while true do end`）会在预算内被拦下。
 - **脚本大小 ≤ 64KB**。
 
 ---
@@ -899,7 +910,8 @@ end
 **模式要点**:
 - `spawn(fn)` 把任意 "动作序列函数" 变成异步任务；函数里用 `sleep(us)` 表达等待。
 - 用 `dt_us` 倒计时 (`remain -= dt`，到 0 就 resume)。
-- 协程里每一步仍要**轻量** — 在 `tick` 里被 resume，别在一步里做重循环。
+- 协程里每一步仍要**轻量** — 在 `tick` 里被 resume，别在一步里做重循环。等待外部条件时也一样：`while not cond() do sleep(10) end`（每 10ms 醒来查一次），**不要写无 `sleep` 的忙等**——单次进入 VM 的 10ms 墙钟预算会被它烧穿。
+- 协程可以**长期运行**（宏循环这类），每片耗时极短即可；预算按"单次 tick 内所有分片累计"计，正常分片远碰不到。
 - `coroutine` 标准库可用 (`create/resume/yield/status`)。
 
 ### 外部指令控制 (on_custom_event + 参数解码 + print 回传)
@@ -971,6 +983,42 @@ echo -ne '\x01tap(540,1200)' | websocat ws://192.168.73.1:80/ws
 
 > WS 路径最大 128 字节，HID 路径最大 60 字节。超出截断。
 
+### BOOTSEL 按键 (on_boot_button)
+
+板载 BOOTSEL 按键可作为脚本输入：短按/长按识别、无外接按键实现运行时切换。`on_boot_button` 是按下/松开边沿触发，"按住期间"的状态要用 `tick` + 计时标志。
+
+```lua
+-- 短按 BOOTSEL → 循环切换配置槽位 (0-8)；长按 1 秒 → LED 变红提示 (松开恢复)
+local press_us  = nil     -- 已按下的持续时间 (µs), nil = 未按下
+local long_fired = false
+
+function on_boot_button(pressed)
+    if pressed then
+        press_us   = 0
+        long_fired = false
+    else
+        if press_us and not long_fired then
+            -- 短按: 切到下一个槽位, 效果同 Alt+F1~F9 热键
+            set_current_slot((get_current_slot() + 1) % 9)
+        end
+        press_us = nil
+        led_off()
+    end
+end
+
+function tick(dt_us)
+    if press_us then
+        press_us = press_us + dt_us
+        if press_us >= 1000000 and not long_fired then
+            long_fired = true
+            set_led(255, 0, 0)   -- 长按 1s: LED 变红作为反馈
+        end
+    end
+end
+```
+
+> 事件由 core0 消抖后经 IPC 投递 (约 20–30ms 延迟)，按下与松开各触发一次 `on_boot_button`。**无需 `enable_listen`** — 只要定义了此函数就会触发。
+
 ### 空模板
 
 ```lua
@@ -978,6 +1026,7 @@ function init() end
 function on_key(keycode, down) return false end
 function on_mouse_btn(button, down) return false end
 function on_custom_event(str) return false end
+function on_boot_button(pressed) end
 function tick(dt_us) end
 ```
 
