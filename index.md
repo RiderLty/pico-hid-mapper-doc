@@ -39,8 +39,8 @@ features:
     title: WebHID 控制
     details: 基于WebHID API的上位机控制工具，在浏览器中直接使用。
   - icon: 🎮
-    title: MAKCU 键鼠控制
-    details: 通过 UART 串口远程控制键鼠，支持文本与 V2 二进制协议，兼容 makcu-py-lib 生态。
+    title: Hurra 串口控制
+    details: 通过 UART 串口远程控制键鼠，Hurra 二进制协议，兼容 hurra-bridge（KMBox Net 生态）。
 ---
 
 ## 它能做什么？
@@ -66,7 +66,7 @@ features:
 
 ### 可选硬件
 
-**群友定制 RP2350A 键鼠映射板** — 有群友把本项目会用到的接口集成到了一块自制板子上：键鼠主机口、GPIO8 扩展 USB 主机口（可外接第二个键鼠设备），以及 MAKCU 串口的板载 USB 转串口（连接上位机时免自行焊接，也无需 USB-TTL 适配器）。固件刷写方式与微雪板一致。
+**群友定制 RP2350A 键鼠映射板** — 有群友把本项目会用到的接口集成到了一块自制板子上：键鼠主机口、GPIO8 扩展 USB 主机口（可外接第二个键鼠设备），以及 Hurra 串口的板载 USB 转串口（连接上位机时免自行焊接，也无需 USB-TTL 适配器）。固件刷写方式与微雪板一致。
 
 <div align="center">
   <img src="/custom-board-1.jpg" alt="群友定制 RP2350A 键鼠映射板 实拍" width="360" style="border-radius: 12px; margin: 8px; vertical-align: middle;">

@@ -17,7 +17,7 @@
 | CH334 USB 2.0 Hub | PIO Host 模式下扩展 USB 接口 （其他型号拓展坞不保证可用） |
 | 杜邦线（可选） | 通过 GPIO8（D+）/ GPIO9（D−）外接第二个 USB 键鼠设备（需自行焊接） |
 
-> 🛒 **不想动手？群友定制 RP2350A 键鼠映射板**：把上述接口集成到一块自制板子上——键鼠主机口、GPIO8 扩展 USB 主机口，MAKCU 串口也板载了 USB 转串口（连电脑免焊接、免 USB-TTL 适配器）。固件刷写方式与微雪板完全一致。
+> 🛒 **不想动手？群友定制 RP2350A 键鼠映射板**：把上述接口集成到一块自制板子上——键鼠主机口、GPIO8 扩展 USB 主机口，Hurra 串口也板载了 USB 转串口（连电脑免焊接、免 USB-TTL 适配器）。固件刷写方式与微雪板完全一致。
 > 👉 [【闲鱼】自制RP2350A键鼠映射硬件板](https://m.tb.cn/h.8LxDIrl?tk=uGqUT5wZoPk)
 
 ## 第一步：刷入固件
@@ -122,7 +122,7 @@ PIO 口支持两种控制方式：
 - 了解 [HIDAPI](/api/hid-api)，可自行编码实现自定义上位机控制设备
 - 学习 [Lua 脚本](/api/lua-api) 编写自定义宏，实现压枪、连招、一键丢弃等高级功能
 - 通过 [WebSocket API](/api/ws-api) 或 [HIDAPI](/api/hid-api#cmd-0xfa-自定义事件) 向 Lua 发送自定义指令，实现外部程序联动
-- 使用 [MAKCU 串口控制](/api/makcu-api)，通过 USB-TTL 连接 GPIO2/3 串口，用文本或 V2 二进制协议远程控制键鼠（配合 makcu-py-lib 上位机库）
+- 使用 [Hurra 串口控制](/api/serial-api)，通过 USB-TTL 连接 GPIO2/3 串口远程控制键鼠（可经 hurra-bridge 对接 KMBox Net 生态）
 
 ## 常见问题
 
