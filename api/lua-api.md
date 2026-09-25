@@ -41,6 +41,13 @@ webctrl WebHID 工具         → HID OUT CMD 0xFA    → pio_device → lua_bin
 core0 BOOTSEL 消抖轮询 (10ms 采样, 连续 3 次一致) → 引擎 IPC → lua_binder_on_boot_button
 ```
 
+脚本主动输出（两条**互不相干**的通路，别混淆）：
+
+```
+dkb_* / dmo_*  → USB HID 键盘 / 鼠标 → 上位机   直通输出：不经过映射引擎，与「映射开关」无关
+input_*        → 回到上面的「映射引擎」入口       注入：当作真实输入重走一遍管线，会触屏、受开关影响
+```
+
 > 关键：脚本运行在输入热路径上，返回 `true` 会"吃掉"事件让 core 不再做默认处理，返回 `false` 则原样放行。
 > 对 `on_mouse_move`/`on_mouse_wheel` 而言，"拦截" = 把位移量(dx/dy 或 wheel) **清零**后再交给 core。
 
@@ -272,14 +279,16 @@ input_mouse_move(100, 0)
 `dkb_` = direct keyboard（直接键盘输出）。与上面的 `input_keyboard` 不同：这一组**不经过映射引擎**，直接把按键作为一台 USB 键盘发给手机/电脑。
 需要先在「参数配置 → 键盘直通」打开并重启设备（`dkb_is_on()` 可查询当前是否可用；开关关闭时这些函数不报错，只是什么都不做）。
 
+> 直通输出**不受「映射开关」影响**：`map_on` 只决定物理键鼠是走触屏映射、还是（开关打开时）直通给上位机；`dkb_*` 任何时候都照发。
+
 | 函数 | 参数 | 说明 |
 |------|------|------|
-| `dkb_key(keycode, down)` | `keycode`: HID 键码 (0-254); `down`: bool | 按下 / 抬起一个键。修饰键（`0xE0`–`0xE7`）同样适用。 |
+| `dkb_key(keycode, down)` | `keycode`: `0x04`–`0x73` 或 `0xE0`–`0xE7`; `down`: bool | 按下 / 抬起一个键。修饰键（`0xE0`–`0xE7`）同样适用。范围外的键码会被忽略。 |
 | `dkb_release_all()` | 无 | 抬起所有键与修饰键。脚本异常或退出前调用可防"卡键"。 |
 | `dkb_led()` | 无 | 读手机/电脑写回的键盘灯状态：bit0 Num、bit1 Caps、bit2 Scroll、bit3 Compose、bit4 Kana。 |
 | `dkb_is_on()` | 无 | 键盘输出是否已启用（开关打开且设备已重启后为 `true`）。 |
 | `dkb_state()` | 无 | 一次拿到整份按键状态，见下（返回 4 个整数）。 |
-| `dkb_is_down(keycode)` | `keycode`: HID 键码 | 该键当前是否按下（`true`/`false`）。范围同 `dkb_key`。 |
+| `dkb_is_down(keycode)` | `keycode`: 同上 | 该键当前是否按下（`true`/`false`）。范围同 `dkb_key`。 |
 
 > **键码范围**：只支持键盘区的 `0x04`–`0x73`（字母、数字、F1–F24、方向键、编辑键等）与修饰键 `0xE0`–`0xE7`。
 > 媒体键等更靠后的键码不支持，会被忽略。
@@ -333,6 +342,9 @@ dkb_key(0xE0, true); dkb_key(0x06, true); dkb_key(0x06, false); dkb_key(0xE0, fa
 | `dmo_is_down(button)` | `button`: 0–4 | 该鼠标键当前是否按下。 |
 
 按键状态与物理鼠标**各记一份**：脚本按住的键不会被物理鼠标的同键操作带掉，反之亦然。按下与抬起同样要自己配对。
+
+> `dmo_btn` 只认 5 个真实鼠标键（0–4）：滚轮伪键编号（5/6）在这里不接受，滚轮走 `dmo_move` 的第三个参数。
+> 直通输出同样**不受「映射开关」影响**；`dmo_*` 任何时候都照发（未启用时除外）。
 
 > `dkb_state()` / `dkb_is_down()` / `dmo_state()` / `dmo_is_down()` 查的是**发给手机/电脑的状态**
 > （含直通进来的物理键鼠）；想查"引擎收到了哪些键"，用 `is_key_down()` / `is_mouse_btn_down()`。
@@ -997,6 +1009,133 @@ end
 - 协程里每一步仍要**轻量** — 在 `tick` 里被 resume，别在一步里做重循环。等待外部条件时也一样：`while not cond() do sleep(10) end`（每 10ms 醒来查一次），**不要写无 `sleep` 的忙等**——单次进入 VM 的 10ms 墙钟预算会被它烧穿。
 - 协程可以**长期运行**（宏循环这类），每片耗时极短即可；预算按"单次 tick 内所有分片累计"计，正常分片远碰不到。
 - `coroutine` 标准库可用 (`create/resume/yield/status`)。
+
+### 键鼠直通 (dkb_ / dmo_)
+
+把 Pico 当成一台「键盘 + 鼠标」用：脚本直接在上位机（手机/电脑）上敲键、移动光标。与前面的触屏示例完全独立，**不进触屏链路**。
+
+**前置**（面板里改完必须重启设备）：
+
+- 键盘：「参数配置 → 键盘直通」打开
+- 鼠标：「参数配置 → 光标显示方式 → 直接鼠标」，或「PICO 系统配置 → 目标平台 → 苹果」
+
+**用法**：在面板底部「发送文本到 Lua」输入下面任一指令（也可经 WebSocket CMD 0x01 发送）：
+
+| 指令 | 效果 |
+|---|---|
+| `type:hello` | 在上位机逐字打出 `hello` |
+| `click` | 光标右移 100 像素后点一下左键 |
+| `wheel:-3` | 光标不动，向下滚 3 格 |
+| `state` | 回传一行直通状态（键盘 4 个位图整数 + 鼠标位图） |
+
+```lua
+-- ═══ 键鼠直通示例 ═══
+-- 直通输出不经过映射引擎：这里的按键/位移不会变成触屏事件，也不受「映射开关」影响。
+
+local TEXT_KEYS = {                       -- 演示用：字母/数字/空格/回车 (HID 键码)
+    ["a"] = 0x04, ["b"] = 0x05, ["c"] = 0x06, ["d"] = 0x07, ["e"] = 0x08,
+    ["f"] = 0x09, ["g"] = 0x0A, ["h"] = 0x0B, ["i"] = 0x0C, ["j"] = 0x0D,
+    ["k"] = 0x0E, ["l"] = 0x0F, ["m"] = 0x10, ["n"] = 0x11, ["o"] = 0x12,
+    ["p"] = 0x13, ["q"] = 0x14, ["r"] = 0x15, ["s"] = 0x16, ["t"] = 0x17,
+    ["u"] = 0x18, ["v"] = 0x19, ["w"] = 0x1A, ["x"] = 0x1B, ["y"] = 0x1C,
+    ["z"] = 0x1D, ["1"] = 0x1E, ["2"] = 0x1F, ["3"] = 0x20, ["4"] = 0x21,
+    ["5"] = 0x22, ["6"] = 0x23, ["7"] = 0x24, ["8"] = 0x25, ["9"] = 0x26,
+    ["0"] = 0x27, ["\r"] = 0x28, [" "] = 0x2C,
+}
+
+-- ── 协程调度器 (写法与要点见上一节「异步动作序列」) ──
+local tasks = {}
+
+local function sleep(wait_us)
+    coroutine.yield(wait_us)
+end
+
+local function spawn(fn)
+    tasks[#tasks + 1] = { co = coroutine.create(fn), remain = 0 }
+end
+
+function tick(dt_us)
+    for i = #tasks, 1, -1 do
+        local t = tasks[i]
+        t.remain = t.remain - dt_us
+        if t.remain <= 0 then
+            local ok, wait_us = coroutine.resume(t.co)
+            if not ok or coroutine.status(t.co) == "dead" then
+                table.remove(tasks, i)
+            else
+                t.remain = wait_us or 0
+            end
+        end
+    end
+end
+
+-- ── 逐字打字：按下 → 停 15ms → 抬起 → 停 15ms ──
+local function type_text(s)
+    spawn(function()
+        for i = 1, #s do
+            local k = TEXT_KEYS[s:sub(i, i)]
+            if k then
+                dkb_key(k, true)
+                sleep(15000)
+                dkb_key(k, false)
+                sleep(15000)
+            end
+        end
+        dkb_release_all()                 -- 兜底: 中途出错也不会在上位机卡键
+    end)
+end
+
+-- ── 移动 + 单击 ──
+local function click_at_offset(dx, dy)
+    spawn(function()
+        dmo_move(dx, dy)
+        sleep(20000)                      -- 等光标到位再点
+        dmo_btn(0, true)                  -- 0 = 左键
+        sleep(30000)                      -- 按住 30ms, 太短会被上位机忽略
+        dmo_btn(0, false)
+    end)
+end
+
+function on_custom_event(str)
+    local cmd, arg = string.match(str, "^([%a_]+):?(.*)$")
+
+    if cmd == "type" then
+        if not dkb_is_on() then
+            warn("键盘直通未启用: 请在「参数配置 → 键盘直通」打开后重启设备")
+            return true
+        end
+        type_text(arg)
+
+    elseif cmd == "click" then
+        if not dmo_is_on() then
+            warn("鼠标直通未启用: 请选「光标显示方式 → 直接鼠标」或「目标平台 → 苹果」后重启设备")
+            return true
+        end
+        click_at_offset(100, 0)
+
+    elseif cmd == "wheel" then
+        dmo_move(0, 0, tonumber(arg) or -1)     -- 正 = 上滚
+
+    elseif cmd == "state" then
+        local w = { dkb_state() }               -- 4 个整数 = 16 字节小端位图
+        print(string.format("[直通] 键盘 %08X %08X %08X %08X | A键=%s | 鼠标位图=%d | 左键=%s",
+            w[1], w[2], w[3], w[4],
+            tostring(dkb_is_down(0x04)),        -- 0x04 = A
+            dmo_state(),
+            tostring(dmo_is_down(0))))
+    else
+        warn("unknown cmd: " .. str)
+    end
+    return true
+end
+```
+
+**模式要点**:
+
+- 两个直通开关**不归脚本管**：脚本只能用 `dkb_is_on()` / `dmo_is_on()` 查询；未启用时这些函数不报错，什么都不做（所以示例里先查再发，并在日志里说明原因）。
+- 按键必须**自己配对**按下/抬起（没有 `*_tap`）；要时序就照上一节的协程写法。`dkb_release_all()` / `dmo_release_all()` 适合放在序列末尾兜底。
+- 物理键鼠与脚本各记一份按键状态：直通开关打开时，插在设备上的物理键盘也会直通给上位机（映射关闭时），但这与脚本按下的键互不干扰。
+- `dkb_state()` / `dkb_is_down()` / `dmo_state()` / `dmo_is_down()` 查的是**发给上位机的状态**（含直通进来的物理键鼠）；查"引擎收到了哪些键"用 `is_key_down()` / `is_mouse_btn_down()`。
 
 ### 外部指令控制 (on_custom_event + 参数解码 + print 回传)
 
