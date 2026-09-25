@@ -275,7 +275,6 @@ input_mouse_move(100, 0)
 | 函数 | 参数 | 说明 |
 |------|------|------|
 | `dkb_key(keycode, down)` | `keycode`: HID 键码 (0-254); `down`: bool | 按下 / 抬起一个键。修饰键（`0xE0`–`0xE7`）同样适用。 |
-| `dkb_tap(keycode)` | `keycode`: HID 键码 | 按一下（按下后立即抬起）。 |
 | `dkb_release_all()` | 无 | 抬起所有键与修饰键。脚本异常或退出前调用可防"卡键"。 |
 | `dkb_led()` | 无 | 读手机/电脑写回的键盘灯状态：bit0 Num、bit1 Caps、bit2 Scroll、bit3 Compose、bit4 Kana。 |
 | `dkb_is_on()` | 无 | 键盘输出是否已启用（开关打开且设备已重启后为 `true`）。 |
@@ -285,16 +284,21 @@ input_mouse_move(100, 0)
 
 ```lua
 -- 向手机输入 "Hi"（H=0x0B, i=0x0C，Shift 用修饰键 0xE1）
+-- 按下与抬起必须自己配对；间隔太短可能被宿主吃掉，需要明显按下时长就分两步 + 协程 sleep
 if dkb_is_on() then
     dkb_key(0xE1, true)   -- 左 Shift 按下
-    dkb_tap(0x0B)         -- H
+    dkb_key(0x0B, true)   -- H 按下
+    dkb_key(0x0B, false)  -- H 抬起
     dkb_key(0xE1, false)  -- Shift 抬起
-    dkb_tap(0x0C)         -- i
+    dkb_key(0x0C, true); dkb_key(0x0C, false)   -- i
 end
 
 -- 组合键 Ctrl+C
-dkb_key(0xE0, true); dkb_tap(0x06); dkb_key(0xE0, false)
+dkb_key(0xE0, true); dkb_key(0x06, true); dkb_key(0x06, false); dkb_key(0xE0, false)
 ```
+
+> 想要"按住 30ms 再松"这种时序，用「[异步动作序列](#异步动作序列-协程-coroutine)」里的协程 `sleep`：
+> `spawn(function() dkb_key(0x04, true); sleep(30000); dkb_key(0x04, false) end)`。
 
 ---
 
