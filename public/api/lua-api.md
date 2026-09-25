@@ -139,7 +139,7 @@ end
 
 | 函数 | 说明 |
 |------|------|
-| `enable_listen_keys(code1, code2, ...)` | 声明 `on_key` 要接收的 HID 键码 (0x00–0xFF, 可多个)。**不声明则 `on_key` 不触发。** 可多次调用 (累加)。每次脚本重载时清空。 |
+| `enable_listen_keys(code1, code2, ...)` | 声明 `on_key` 要接收的 HID 键码 (0x00–0xFF, 可多个)。**不声明则 `on_key` 不触发。** 可多次调用 (累加)。每次脚本重载时清空。**轮盘方向键 (默认 W/A/S/D, HID 0x1A/0x04/0x16/0x07) 与疾跑键 (默认 Shift 0xE1) 也不例外**——想监听它们就得在这里声明。 |
 | `disable_listen_keys(code1, ...)` | 解除对指定键码的监听 (可多个)；**无参数则清空全部键监听**。 |
 | `enable_listen_mouse_btn(btn1, btn2, ...)` | 声明 `on_mouse_btn` 要接收的鼠标按钮 (0–7)。语义同上。 |
 | `disable_listen_mouse_btn(btn1, ...)` | 解除对指定按钮的监听 (variadic)；**无参数则清空全部按钮监听**。 |
@@ -171,6 +171,7 @@ end
 **拦截语义 (重要)**：
 
 - `on_key`/`on_mouse_btn` 返回 `true` → core 跳过对该键的**全部默认处理** (包括 Alt+F1~F9 切槽热键、鼠标切换键、WASD 轮盘、配置映射)。返回 `false` → Lua处理完毕后，交给映射继续处理原始逻辑。
+- **轮盘方向键（以及疾跑键）也走 `on_key`**：映射配置里「轮盘方向键」(`WHEEL.WASD`) 那四个键 (默认 W/A/S/D) 并不是被 core 提前吃掉的——它们和其它键一样先交给 Lua，`on_key` 返回 `true` 时轮盘不会动。反过来, 想让脚本看到它们同样必须 `enable_listen_keys(...)` 声明 (不声明就收不到)。默认模板只声明了 `KEY_P/KEY_1/KEY_2`, 所以"按 W 脚本没反应"通常是漏了这一步, 而不是被轮盘拦截。
 - `on_mouse_move`/`on_mouse_wheel` 返回 `true` → 对应位移量清零。**移动和滚轮分开判定**: 只拦截 `on_mouse_move` 不影响同帧滚轮，反之亦然。
 
 ---
@@ -1280,6 +1281,7 @@ function tick(dt_us) end
 ## 常见坑
 
 - **定义了 `on_key` 却没 `enable_listen_keys`** → 永远不触发。必须声明监听。
+- **以为轮盘方向键 (默认 W/A/S/D) 被"提前吃掉"** → 不是。这四个键与疾跑键和其它键完全一样：**先**进 `on_key`，返回 `false` 才轮到 core 驱动轮盘 (顺序见「拦截语义」)。脚本收不到它们，只可能是漏了 `enable_listen_keys(0x1A, 0x04, 0x16, 0x07)`；反过来 `on_key` 返回 `true` 时轮盘不会动。
 - **把缓存值写成 `init()` 内部的 `local`** → `on_key`/`tick` 看不到。要写**全局**或文件顶层 `local`。
 - **忘了 `touch_up`** → 触点 (最多 10) 很快耗尽，`touch_down` 返回 `0xFF`。
 - **在 `on_key`/`tick` 里做重活** → 输入卡顿。
