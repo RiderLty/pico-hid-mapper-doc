@@ -278,9 +278,24 @@ input_mouse_move(100, 0)
 | `dkb_release_all()` | 无 | 抬起所有键与修饰键。脚本异常或退出前调用可防"卡键"。 |
 | `dkb_led()` | 无 | 读手机/电脑写回的键盘灯状态：bit0 Num、bit1 Caps、bit2 Scroll、bit3 Compose、bit4 Kana。 |
 | `dkb_is_on()` | 无 | 键盘输出是否已启用（开关打开且设备已重启后为 `true`）。 |
+| `dkb_state()` | 无 | 一次拿到整份按键状态，见下（返回 4 个整数）。 |
+| `dkb_is_down(keycode)` | `keycode`: HID 键码 | 该键当前是否按下（`true`/`false`）。范围同 `dkb_key`。 |
 
 > **键码范围**：只支持键盘区的 `0x04`–`0x73`（字母、数字、F1–F24、方向键、编辑键等）与修饰键 `0xE0`–`0xE7`。
 > 媒体键等更靠后的键码不支持，会被忽略。
+
+> **`dkb_state()` 的四个整数**：拼起来是 16 字节（小端）——第 1 字节是修饰键位图（bit0 左Ctrl…bit7 右GUI），
+> 第 2–15 字节是 112 位键位图，第 16 字节恒为 0。键 `keycode`（`0x04`–`0x73`）对应第 `8 + (keycode - 0x04)` 位；
+> 修饰键 `0xE0`–`0xE7` 对应第 `keycode - 0xE0` 位。
+>
+> ```lua
+> local words = {dkb_state()}          -- words[1]..words[4]
+> local n = 0x1A - 0x04                -- W 键
+> local w = words[(8 + n) // 32 + 1]   -- 落在哪个整数
+> local down = (w >> ((8 + n) % 32)) & 1 == 1
+> ```
+>
+> 单独查一个键用 `dkb_is_down()` 更省事（Lua 5.4 支持 `&`、`>>` 等位运算）。
 
 ```lua
 -- 向手机输入 "Hi"（H=0x0B, i=0x0C，Shift 用修饰键 0xE1）
@@ -314,8 +329,13 @@ dkb_key(0xE0, true); dkb_key(0x06, true); dkb_key(0x06, false); dkb_key(0xE0, fa
 | `dmo_btn(button, down)` | `button`: 0=左 1=右 2=中 3=后退 4=前进 | 按下 / 抬起一个鼠标键。 |
 | `dmo_release_all()` | 无 | 抬起 `dmo_` 按下过的所有键（插在设备上的物理鼠标不受影响）。 |
 | `dmo_is_on()` | 无 | 鼠标直通是否可用。 |
+| `dmo_state()` | 无 | 按键位图整数：bit0 左、bit1 右、bit2 中、bit3 后退、bit4 前进。 |
+| `dmo_is_down(button)` | `button`: 0–4 | 该鼠标键当前是否按下。 |
 
 按键状态与物理鼠标**各记一份**：脚本按住的键不会被物理鼠标的同键操作带掉，反之亦然。按下与抬起同样要自己配对。
+
+> `dkb_state()` / `dkb_is_down()` / `dmo_state()` / `dmo_is_down()` 查的是**发给手机/电脑的状态**
+> （含直通进来的物理键鼠）；想查"引擎收到了哪些键"，用 `is_key_down()` / `is_mouse_btn_down()`。
 
 ```lua
 -- 光标右移 200 像素，再点一下左键
