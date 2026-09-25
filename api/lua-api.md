@@ -269,31 +269,31 @@ input_mouse_move(100, 0)
 
 ## 键盘输出（打到手机/电脑）
 
-命名沿用 vmouse 那套「动词_对象」约定。与上面的 `input_keyboard` 不同：这一组**不经过映射引擎**，直接把按键作为一台 USB 键盘发给手机/电脑。
-需要先在「参数配置 → 键盘直通」打开并重启设备（`is_kbd_on()` 可查询当前是否可用；开关关闭时这些函数不报错，只是什么都不做）。
+`dkb_` = direct keyboard（直接键盘输出）。与上面的 `input_keyboard` 不同：这一组**不经过映射引擎**，直接把按键作为一台 USB 键盘发给手机/电脑。
+需要先在「参数配置 → 键盘直通」打开并重启设备（`dkb_is_on()` 可查询当前是否可用；开关关闭时这些函数不报错，只是什么都不做）。
 
 | 函数 | 参数 | 说明 |
 |------|------|------|
-| `set_kbd_key(keycode, down)` | `keycode`: HID 键码 (0-254); `down`: bool | 按下 / 抬起一个键。修饰键（`0xE0`–`0xE7`）同样适用。 |
-| `tap_kbd_key(keycode)` | `keycode`: HID 键码 | 按一下（按下后立即抬起）。 |
-| `release_kbd_keys()` | 无 | 抬起所有键与修饰键。脚本异常或退出前调用可防"卡键"。 |
-| `get_kbd_led()` | 无 | 读手机/电脑写回的键盘灯状态：bit0 Num、bit1 Caps、bit2 Scroll、bit3 Compose、bit4 Kana。 |
-| `is_kbd_on()` | 无 | 键盘输出是否已启用（开关打开且设备已重启后为 `true`）。 |
+| `dkb_key(keycode, down)` | `keycode`: HID 键码 (0-254); `down`: bool | 按下 / 抬起一个键。修饰键（`0xE0`–`0xE7`）同样适用。 |
+| `dkb_tap(keycode)` | `keycode`: HID 键码 | 按一下（按下后立即抬起）。 |
+| `dkb_release_all()` | 无 | 抬起所有键与修饰键。脚本异常或退出前调用可防"卡键"。 |
+| `dkb_led()` | 无 | 读手机/电脑写回的键盘灯状态：bit0 Num、bit1 Caps、bit2 Scroll、bit3 Compose、bit4 Kana。 |
+| `dkb_is_on()` | 无 | 键盘输出是否已启用（开关打开且设备已重启后为 `true`）。 |
 
 > **键码范围**：只支持键盘区的 `0x04`–`0x73`（字母、数字、F1–F24、方向键、编辑键等）与修饰键 `0xE0`–`0xE7`。
 > 媒体键等更靠后的键码不支持，会被忽略。
 
 ```lua
 -- 向手机输入 "Hi"（H=0x0B, i=0x0C，Shift 用修饰键 0xE1）
-if is_kbd_on() then
-    set_kbd_key(0xE1, true)   -- 左 Shift 按下
-    tap_kbd_key(0x0B)         -- H
-    set_kbd_key(0xE1, false)  -- Shift 抬起
-    tap_kbd_key(0x0C)         -- i
+if dkb_is_on() then
+    dkb_key(0xE1, true)   -- 左 Shift 按下
+    dkb_tap(0x0B)         -- H
+    dkb_key(0xE1, false)  -- Shift 抬起
+    dkb_tap(0x0C)         -- i
 end
 
 -- 组合键 Ctrl+C
-set_kbd_key(0xE0, true); tap_kbd_key(0x06); set_kbd_key(0xE0, false)
+dkb_key(0xE0, true); dkb_tap(0x06); dkb_key(0xE0, false)
 ```
 
 ---
