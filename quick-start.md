@@ -180,3 +180,7 @@ PIO 口支持两种控制方式：
 1. 使用 USB 网卡期间停用该模块（Magisk 模块开关或 `killall clash`），拔插一次网卡即可恢复；
 2. 需要常驻：关闭模块的 `fake-ip` DNS 模式，并将 `192.168.73.0/24` 加入 DIRECT 绕行名单；
 3. 自查：root shell 执行 `ps -A | grep -iE "clash|adguard|proxy"`，有输出即中招。
+
+## 更多文档
+
+映射配置说明、各接口完整文档（HIDAPI / WebSocket / Lua 脚本 / 串口协议 Hurra）与键码参考，见 **[文档中心](/api/)**。
