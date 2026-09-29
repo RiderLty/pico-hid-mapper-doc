@@ -184,7 +184,7 @@ end
 | `id = touch_move(id, x, y)` | 把触点 `id` 移到 `(x,y)`，返回 id。 |
 | `touch_up(id)` | 抬起触点 `id`。 |
 
-> 触点最多 **10** 个。用完务必 `touch_up` 释放，否则 `touch_down` 返回 `0xFF`。建议为每个按键维护独立触点 id。
+> 触点最多 **12** 个。用完务必 `touch_up` 释放，否则 `touch_down` 返回 `0xFF`。建议为每个按键维护独立触点 id。
 
 ---
 
