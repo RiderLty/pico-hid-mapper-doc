@@ -1019,7 +1019,11 @@
           ]);
           if (result.timeout || result.done) break;
           if (result.value) text += new TextDecoder().decode(result.value);
-          if (text.includes('km.MAKCU_V1.0')) return { reader, writer };
+          // 已激活设备回 km.MAKCU_V1.0；旧固件或未激活变体可能只回 UNLICENSED，
+          // 两者都能证明当前速率已经进入可通信的 MAKCU 文本通道。
+          if (text.includes('km.MAKCU_V1.0') || text.includes('UNLICENSED')) {
+            return { reader, writer };
+          }
         }
       } catch (_) {
         // 当前候选速率不匹配，交给下一档处理。
