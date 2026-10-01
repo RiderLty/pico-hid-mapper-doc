@@ -2,7 +2,7 @@
 
 > 📥 **下载此API文档**：<a href="/api/serial-api.md" download>serial-api.md</a>
 
-设备的 UART 串口（GPIO2/3，固定 2M 8N1）使用 **Hurra 二进制协议**（基于 TinyFrame 成帧），替代原先的 MAKCU 协议。相比 HID 命令帧，串口通道提供更完整的控制能力：鼠标/键盘注入、连点、定时按压、字符串输入、平滑移动（automove / 贝塞尔轨迹）、按键锁定与物理输入屏蔽、状态遥测等。
+设备的 UART 串口（GPIO2/3，固定 4M 8N1）使用 **Hurra 二进制协议**（基于 TinyFrame 成帧），替代原先的 MAKCU 协议。相比 HID 命令帧，串口通道提供更完整的控制能力：鼠标/键盘注入、连点、定时按压、字符串输入、平滑移动（automove / 贝塞尔轨迹）、按键锁定与物理输入屏蔽、状态遥测等。
 
 ## 与 HID 控制的区别
 
@@ -25,7 +25,7 @@
 - 无帧头字节，同步靠头 CRC 自校验；上位机按「同 ID + 同 TYPE」配对应答
 - 完整命令集（TYPE 码与载荷布局）以参考实现为准：固件 `src/hurra.c`、[hurra-v2](https://github.com/VoltCyclone/Hurra-v2) / [hurra-app](https://github.com/VoltCyclone/Hurra-v2)（host 桥与 libhurra），Python 帧编码示例见仓库 `pytester/test_hurra.py`
 
-> 💡 原生对接 hurra-bridge：`hurra-bridge --device <串口> --baud 2000000`（**必须显式指定 --baud**，默认 4M），endpoint 选 2 即可获得 KMBox Net UDP 端点，现有 KMBox Net 生态上位机可直接使用。
+> 💡 原生对接 hurra-bridge：`hurra-bridge --device <串口> --baud 4000000`（默认即 4M，与固件一致；2026-10-01 起固件固定 4M，旧版固件仍为 2M），endpoint 选 2 即可获得 KMBox Net UDP 端点，现有 KMBox Net 生态上位机可直接使用。
 
 ## 扩展子命令：HID 控制指令复用
 
@@ -34,6 +34,11 @@
 - TF 载荷 = 原命令帧的 `[CMD][payload...]`（去掉 `55 AA` 帧头与 LEN 域，长度由 TF 帧头承担）
 - 例：HID 帧触摸指令 `55 AA 0B FF <action><id><x:4><y:4>` → 串口 TF 帧 TYPE=`0xC0`、载荷=`FF <action><id><x:4><y:4>`
 - 固件收到后在设备侧重放同一命令路径，语义与 HID 通道完全一致，并获得 TF 载荷 CRC 校验
+- 扩展载荷支持**任意数据**；将来若需要传输文字类数据，在 `0xC0` 下新增子命令即可
+
+## 只解析 Hurra：噪声处理说明
+
+串口**只解析 Hurra 帧**（2026-09-27 起的固件）：早期的 55 AA 直收与文本行通道已从串口移除（55 AA 控制指令统一走 `0xC0` 扩展）。任何非 Hurra 字节——包括裸 `55 AA` 序列、文本行——都按噪声处理，由头 CRC 滑窗丢弃，不产生任何命令效果或日志。上位机若复用旧格式直发，指令将**静默无效**，请一律改走 TF 帧或 `0xC0` 扩展。
 
 ## 从 MAKCU 迁移
 

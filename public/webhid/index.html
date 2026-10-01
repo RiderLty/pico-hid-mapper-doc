@@ -349,7 +349,7 @@
     <div><span class="k">状态</span><span class="v" id="lua-st">—</span></div>
 
     <div id="hint">
-      ① <b>连接 HID</b> 或 <b>连接串口</b> → 选择设备（串口波特率 2M）。<br>
+      ① <b>连接 HID</b> 或 <b>连接串口</b> → 选择设备（串口波特率 4M）。<br>
       ② <b>开始独占</b> → 键鼠被捕获并转发到 Pico。<br>
       ③ <b>手柄</b> → 即插即用，连接后自动转发（标准映射）。<br>
       ④ 退出：默认<b>单击 Esc</b>即可退出；关闭「单击 Esc 退出」开关后需<b>长按 Esc</b>。<br>
@@ -975,7 +975,7 @@
     let serialPort = null;
     let serialReader = null;
     let serialWriter = null;
-    const SERIAL_BAUDRATE = 2000000;
+    const SERIAL_BAUDRATE = 4000000;
 
 
     async function attachSerial(port) {
@@ -1294,7 +1294,7 @@
       const on = !!(device && device.opened);
       $('d-st').textContent = on ? '已连接' : '未连接';
       $('d-st').className = 'v ' + (on ? 'ok' : 'bad');
-      $('d-type').textContent = on ? (device.isSerial ? '串口 (2M)' : 'HID') : '—';
+      $('d-type').textContent = on ? (device.isSerial ? '串口 (4M)' : 'HID') : '—';
       $('d-or').textContent = on ? orient : '—';
       $('btn-conn').disabled = on;
       $('btn-serial').disabled = on;
