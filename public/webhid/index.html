@@ -1128,8 +1128,15 @@
     async function sendSerial(data) {
       if (!serialWriter) return;
       try {
-        // 55 AA 控制帧 = MAKCU 私有扩展帧型，串口直接发裸帧（与 HID 同格式）
-        await serialWriter.write(data);
+        // HID 报告固定为 64B，但串口是连续字节流，必须只发送 55 AA 帧的
+        // 有效长度：[55 AA][LEN][CMD + payload]，总长 = 3 + LEN。
+        // 否则尾部的零填充会被固件 UART 解析器当作文本噪声，污染下一帧同步。
+        let frame = data;
+        if (data.length >= 3 && data[0] === H0 && data[1] === H1) {
+          const frameLen = 3 + data[2];
+          if (frameLen <= data.length) frame = data.subarray(0, frameLen);
+        }
+        await serialWriter.write(frame);
       } catch (err) {
         console.error('串口发送失败:', err);
         stErr++;
