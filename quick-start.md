@@ -155,7 +155,7 @@ PIO 口支持两种控制方式：
 - 了解 [HIDAPI](/api/hid-api)，可自行编码实现自定义上位机控制设备
 - 学习 [Lua 脚本](/api/lua-api) 编写自定义宏，实现压枪、连招、一键丢弃等高级功能
 - 通过 [WebSocket API](/api/ws-api) 或 [HIDAPI](/api/hid-api#cmd-0xfa-自定义事件) 向 Lua 发送自定义指令，实现外部程序联动
-- 使用 [Hurra 串口控制](/api/serial-api)，通过 USB-TTL 连接 GPIO2/3 串口远程控制键鼠（可经 hurra-bridge 对接 KMBox Net 生态）
+- 使用 [MAKCU 串口控制](/api/serial-api)，通过 USB-TTL 连接 GPIO2/3 串口远程控制键鼠（115200 握手后可切换到工作波特率）
 
 ## 常见问题
 
@@ -183,4 +183,4 @@ PIO 口支持两种控制方式：
 
 ## 更多文档
 
-映射配置说明、各接口完整文档（HIDAPI / WebSocket / Lua 脚本 / 串口协议 Hurra）与键码参考，见 **[文档中心](/api/)**。
+映射配置说明、各接口完整文档（HIDAPI / WebSocket / Lua 脚本 / 串口协议 MAKCU）与键码参考，见 **[文档中心](/api/)**。

@@ -1,45 +1,47 @@
-# 串口协议（Hurra）
+# 串口协议（MAKCU）
 
 > 📥 **下载此API文档**：<a href="/api/serial-api.md" download>serial-api.md</a>
 
-设备的 UART 串口（GPIO2/3，固定 4M 8N1）使用 **Hurra 二进制协议**（基于 TinyFrame 成帧），替代原先的 MAKCU 协议。相比 HID 命令帧，串口通道提供更完整的控制能力：鼠标/键盘注入、连点、定时按压、字符串输入、平滑移动（automove / 贝塞尔轨迹）、按键锁定与物理输入屏蔽、状态遥测等。
+设备的 UART 串口（GPIO2/3，8N1）使用 **MAKCU 协议族**。设备开机默认 115200；主机先发送 `DE AD 05 00 A5 <baud LE32>` 握手帧，再切换到目标工作波特率（常用 4M）。运行期也可通过 `km.baud(n)` 或 V2 `0xB1` 切速，重启后恢复 115200。协议提供鼠标/键盘注入、连点、定时按压、字符串输入、平滑移动、按键锁定与物理输入屏蔽、状态遥测等能力。
 
 ## 与 HID 控制的区别
 
-| | HID（Device 模式） | 串口（Hurra 协议） |
+| | HID（Device 模式） | 串口（MAKCU 协议） |
 |---|---|---|
 | 物理链路 | PIO-USB-C 口的 HID OUT/IN 端点 | GPIO2/3 UART（经 USB-TTL 或板载转串口） |
-| 帧格式 | `55 AA` 命令帧（见 [HIDAPI](/api/hid-api)） | TinyFrame 二进制帧 |
+| 帧格式 | `55 AA` 命令帧（见 [HIDAPI](/api/hid-api)） | `km.*` 文本、`DE AD`、`0x50` V2、`55 AA` 私有扩展帧 |
 | 命令集 | 触屏 / 鼠标 / 键盘 / core_input 调度 / vmouse / Lua 自定义事件 | 上述全部能力 + 连点 / 打字 / 平滑移动 / 锁定屏蔽 / 遥测 |
-| 生态 | 自定义上位机 | 可直接对接 [hurra-bridge](https://github.com/VoltCyclone/Hurra-v2)（KMBox Net / Ferrum 端点） |
+| 生态 | 自定义上位机 | MAKCU 文本/V2 客户端；可使用仓库 `pytester/test_makcu.py` 回归 |
 
 两个通道最终进入同一套设备控制路径，功能语义一致；区别只在传输与命令集广度。
 
-## 帧格式概要
+## 握手与帧格式概要
+
+握手时以 115200 打开串口，发送：
 
 ```
-[ID:1][LEN:1][TYPE:1][头CRC16:2][载荷:LEN][载荷CRC16:2]
+DE AD 05 00 A5 <baud:uint32 little-endian>
 ```
 
-- CRC16 多项式 `0x8005`（反射），**CRC 字段大端**，载荷内多字节字段**小端**；LEN=0 的帧无载荷 CRC
-- 无帧头字节，同步靠头 CRC 自校验；上位机按「同 ID + 同 TYPE」配对应答
-- 完整命令集（TYPE 码与载荷布局）以参考实现为准：固件 `src/hurra.c`、[hurra-v2](https://github.com/VoltCyclone/Hurra-v2) / [hurra-app](https://github.com/VoltCyclone/Hurra-v2)（host 桥与 libhurra），Python 帧编码示例见仓库 `pytester/test_hurra.py`
+设备不回复握手帧；主机等待短暂的 TX 排空时间后盲切到相同波特率。文本命令以 `\r` 或 `\n` 结束，例如 `km.version()`、`km.move(10,20)`、`km.baud()`。V2 帧格式为 `[50][CMD][LEN:u16 LE][payload]`；MAKCU 私有扩展帧格式为 `[55][AA][LEN:u8][CMD][payload]`。
 
-> 💡 原生对接 hurra-bridge：`hurra-bridge --device <串口> --baud 4000000`（默认即 4M，与固件一致；2026-10-01 起固件固定 4M，旧版固件仍为 2M），endpoint 选 2 即可获得 KMBox Net UDP 端点，现有 KMBox Net 生态上位机可直接使用。
+## 55 AA 私有扩展帧
 
-## 扩展子命令：HID 控制指令复用
+串口保留 **MAKCU 私有扩展帧 `55 AA`**，格式与 HID 控制帧相同，用于把 [HIDAPI](/api/hid-api) 的控制指令复用到串口：
 
-协议预留了 **Pico 私有扩展块 `TYPE 0xC0`（VCTRL）**，用于把 [HIDAPI](/api/hid-api) 的 `55 AA` 控制指令在串口通道上使用：
+- 帧格式：`[55 AA][LEN][CMD][payload...]`，LEN 为 CMD 与 payload 的总长度
+- 例：`55 AA 0E FC FF <dx:i32><dy:i32><wheel:i32>` 注入一次相对移动
+- 固件收到后在设备侧重放同一控制路径，语义与 HID 通道一致
 
-- TF 载荷 = 原命令帧的 `[CMD][payload...]`（去掉 `55 AA` 帧头与 LEN 域，长度由 TF 帧头承担）
-- 例：HID 帧触摸指令 `55 AA 0B FF <action><id><x:4><y:4>` → 串口 TF 帧 TYPE=`0xC0`、载荷=`FF <action><id><x:4><y:4>`
-- 固件收到后在设备侧重放同一命令路径，语义与 HID 通道完全一致，并获得 TF 载荷 CRC 校验
-- 扩展载荷支持**任意数据**；将来若需要传输文字类数据，在 `0xC0` 下新增子命令即可
+## 噪声处理说明
 
-## 只解析 Hurra：噪声处理说明
+串口只解析上述 MAKCU 帧型。无法组成完整帧的字节会按噪声消费；二进制半帧超过 50ms 未继续接收时复位解析状态。文本行必须以换行结束，非 `km.*` 文本静默消费。
 
-串口**只解析 Hurra 帧**（2026-09-27 起的固件）：早期的 55 AA 直收与文本行通道已从串口移除（55 AA 控制指令统一走 `0xC0` 扩展）。任何非 Hurra 字节——包括裸 `55 AA` 序列、文本行——都按噪声处理，由头 CRC 滑窗丢弃，不产生任何命令效果或日志。上位机若复用旧格式直发，指令将**静默无效**，请一律改走 TF 帧或 `0xC0` 扩展。
+## 示例
 
-## 从 MAKCU 迁移
-
-原 MAKCU（文本 `km.*` / V2 二进制）协议已移除。上位机建议改走 hurra-bridge 的 KMBox Net 或 Ferrum 端点；自研上位机可直接实现上述帧格式，或经 `0xC0` 扩展子命令沿用原有命令帧封装。
+```text
+115200: DE AD 05 00 A5 00 09 3D 00   # 请求切到 4000000
+4000000: km.version()\r\n
+4000000: km.baud(921600)\r\n          # 收到 ACK 后主机切到 921600
+921600:  km.baud()\r\n
+```

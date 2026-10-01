@@ -374,12 +374,10 @@
     const CMD_LUA = 0xFA;    // payload → Lua on_custom_event(str)
     const SUB_GAMEPAD = 0xF9; // 手柄报文 16B → core_input_gamepad_abs/btn（0xFC 子命令）
 
-    // ── Hurra/TinyFrame（串口通道）──
-    // 串口上固件只讲 Hurra 二进制协议（TinyFrame，无 SOF）：[ID][LEN][TYPE]
-    // [头CRC16:2 BE][载荷][载荷CRC16:2 BE]，CRC16 poly 0x8005 反射、初值 0，
-    // 载荷字段小端，LEN==0 帧无载荷 CRC。55 AA 控制帧经 TYPE_VCTRL(0xC0)
-    // 私有子命令通道迁移：TF 载荷 = [CMD][payload...]（原帧去掉 55 AA 与 LEN 域）。
-    const TF_TYPE_VCTRL = 0xC0;
+    // ── MAKCU 串口通道 ──
+    // 串口上固件只讲 MAKCU 协议：55 AA 控制帧是 MAKCU 的私有扩展帧型
+    // （[55 AA][LEN][CMD][payload...]），与 HID 通道同格式——串口直接发裸
+    // 55 AA 帧即可，无需任何包装。
 
     const MAX_DELTA = 127;
 
@@ -978,15 +976,37 @@
     const SERIAL_BAUDRATE = 4000000;
 
 
+    // MAKCU 握手常量：固件开机 115200，主机发 DE AD 0xA5 切速帧后切到工作速率
+    const MAKCU_BOOT_BAUD = 115200;
+    function makcuBaudSwitchFrame(baud) {
+      const f = new Uint8Array(9);
+      f[0] = 0xDE; f[1] = 0xAD; f[2] = 0x05; f[3] = 0x00; f[4] = 0xA5;
+      f[5] = baud & 0xFF; f[6] = (baud >> 8) & 0xFF;
+      f[7] = (baud >> 16) & 0xFF; f[8] = (baud >> 24) & 0xFF;
+      return f;
+    }
+
     async function attachSerial(port) {
       try {
+        if (MAKCU_BOOT_BAUD !== SERIAL_BAUDRATE) {
+          // MAKCU 握手：Web Serial 不支持在线改波特率——115200 开口发切速帧，
+          // 关口再以工作速率重开。设备已在工作速率（上次会话残留）时切速帧
+          // 是噪声被丢弃，重开同样对上
+          await port.open({ baudRate: MAKCU_BOOT_BAUD });
+          const w = port.writable.getWriter();
+          await w.write(makcuBaudSwitchFrame(SERIAL_BAUDRATE));
+          await w.releaseLock();
+          await new Promise(r => setTimeout(r, 60));
+          await port.close();
+          await new Promise(r => setTimeout(r, 30));
+        }
         await port.open({ baudRate: SERIAL_BAUDRATE });
         serialPort = port;
         serialReader = port.readable.getReader();
         serialWriter = port.writable.getWriter();
 
         // 重置接收缓冲区
-        tfRx = [];
+        serialTextBuf = [];
         // 启动读取循环
         readSerialLoop();
 
@@ -1013,53 +1033,15 @@
           if (done) break;
           if (value && value.length > 0) {
             for (let i = 0; i < value.length; i++) {
-              // 串口 RX 现在只有 Hurra/TinyFrame 帧（55 AA 事件走 WebHID IN）：
-              // 无 SOF，任意字节可作帧起点，靠头 CRC 同步——失败字节落回文本处理
-              feedTfByte(value[i]);
+              // 串口 RX 只有 MAKCU 应答文本（"km.xxx ..." / ">>> " 提示符）；
+              // 设备事件（55 AA 事件帧）走 WebHID IN
+              handleTextByte(value[i]);
             }
           }
         }
       } catch (err) {
         console.error('串口读取错误:', err);
       }
-    }
-
-    // ===== TinyFrame 接收解析（仅日志/扩展用；头 CRC 失败的字节回落文本）=====
-    let tfRx = [];
-    function feedTfByte(byte) {
-      tfRx.push(byte);
-      if (tfRx.length > 512) {   // 防御：异常流清空
-        for (const b of tfRx) handleTextByte(b);
-        tfRx = [];
-        return;
-      }
-      while (tfRx.length >= 5) {
-        const head = tfRx.slice(0, 3);
-        const hc = (tfRx[3] << 8) | tfRx[4];
-        if (tfCrc(head) !== hc) {
-          handleTextByte(tfRx.shift());   // 不是帧头，按文本处理
-          continue;
-        }
-        const n = tfRx[1];
-        const frameLen = 5 + n + (n ? 2 : 0);
-        if (tfRx.length < frameLen) return;   // 半帧，等后续字节
-        const frame = tfRx.splice(0, frameLen);
-        const tfId = frame[0], tfType = frame[2];
-        let payload = null;
-        if (n) {
-          payload = frame.slice(5, 5 + n);
-          const dc = (frame[5 + n] << 8) | frame[6 + n];
-          if (tfCrc(payload) !== dc) { console.log('TF 载荷 CRC 错，丢弃'); continue; }
-        }
-        parseTfFrame(tfId, tfType, payload);
-      }
-    }
-
-    function parseTfFrame(tfId, tfType, payload) {
-      // 设备→主机的事件（如 EVT_ORIENTATION）走 WebHID IN；串口 TF 帧目前
-      // 仅管理类应答（VERSION/STATS/BAUD GET 等），此处记日志供调试
-      console.log(`TF 帧 id=0x${tfId.toString(16)} type=0x${tfType.toString(16)}` +
-                  (payload ? ` len=${payload.length}` : ''));
     }
 
     // ===== 文本字节处理函数 =====
@@ -1086,51 +1068,12 @@
     async function sendSerial(data) {
       if (!serialWriter) return;
       try {
-        // 55 AA 控制帧 → Hurra VCTRL(0xC0) 子命令帧（串口通道协议迁移）
-        await serialWriter.write(buildTfVctrl(data));
+        // 55 AA 控制帧 = MAKCU 私有扩展帧型，串口直接发裸帧（与 HID 同格式）
+        await serialWriter.write(data);
       } catch (err) {
         console.error('串口发送失败:', err);
         stErr++;
       }
-    }
-
-    // ===== TinyFrame 编码（串口通道；与 pytester/test_hurra.py 同算法）=====
-    const TF_CRC_TABLE = (() => {
-      const t = new Uint16Array(256);
-      for (let b = 0; b < 256; b++) {
-        let c = 0, x = b;
-        for (let i = 0; i < 8; i++) {
-          if ((c ^ x) & 1) c = (c >> 1) ^ 0xA001; else c >>= 1;
-          x >>= 1;
-        }
-        t[b] = c;
-      }
-      return t;
-    })();
-    function tfCrc(bytes) {
-      let c = 0;
-      for (let i = 0; i < bytes.length; i++) c = (c >> 8) ^ TF_CRC_TABLE[(c ^ bytes[i]) & 0xFF];
-      return c;
-    }
-    let tfTxId = 0x20;
-    // 输入 [55 AA][LEN][CMD][payload...] → 输出 TF VCTRL 帧
-    function buildTfVctrl(cmdFrame) {
-      const payload = cmdFrame.slice(3, 3 + cmdFrame[2]);   // [CMD][payload...]
-      const n = payload.length;
-      const frame = new Uint8Array(5 + n + (n ? 2 : 0));
-      frame[0] = (++tfTxId) & 0x7F;
-      frame[1] = n;
-      frame[2] = TF_TYPE_VCTRL;
-      const hc = tfCrc(frame.slice(0, 3));
-      frame[3] = (hc >> 8) & 0xFF;   // CRC 大端
-      frame[4] = hc & 0xFF;
-      frame.set(payload, 5);
-      if (n) {
-        const dc = tfCrc(payload);
-        frame[5 + n] = (dc >> 8) & 0xFF;
-        frame[6 + n] = dc & 0xFF;
-      }
-      return frame;
     }
 
     async function detachSerial() {
@@ -1149,7 +1092,7 @@
         serialPort = null;
       }
 
-      tfRx = [];
+      serialTextBuf = [];
       device = null;
       clearPipeline();
       renderStatic();
