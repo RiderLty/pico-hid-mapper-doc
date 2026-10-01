@@ -976,8 +976,11 @@
     const SERIAL_BAUDRATE = 4000000;
 
 
-    // MAKCU 握手常量：固件开机 115200，主机发 DE AD 0xA5 切速帧后切到工作速率
+    // MAKCU 握手常量：固件开机 115200，主机发 DE AD 0xA5 切速帧后切到工作速率。
+    // 设备可能被另一台上位机改到旧的运行速率，所以连接时逐档探测并用
+    // km.version() 确认；协议本身没有自动协商回复，任意自定义速率需加入此表。
     const MAKCU_BOOT_BAUD = 115200;
+    const MAKCU_BAUD_PROBE_RATES = [MAKCU_BOOT_BAUD, 921600, 2000000, 4000000];
     function makcuBaudSwitchFrame(baud) {
       const f = new Uint8Array(9);
       f[0] = 0xDE; f[1] = 0xAD; f[2] = 0x05; f[3] = 0x00; f[4] = 0xA5;
@@ -986,35 +989,88 @@
       return f;
     }
 
-    async function attachSerial(port) {
+    const serialSleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    async function closeSerialAttempt(port, reader, writer) {
+      if (reader) await reader.cancel().catch(() => { });
+      if (reader) reader.releaseLock();
+      if (writer) writer.releaseLock();
+      if (port.opened) await port.close().catch(() => { });
+    }
+
+    // 以 4M 打开后发 MAKCU 文本探针；只有收到版本应答才认为速率匹配。
+    // 成功时把 reader/writer 交给正式串口通道，避免再次开关串口。
+    async function openAndVerifyWorkRate(port) {
+      let reader = null;
+      let writer = null;
       try {
-        if (MAKCU_BOOT_BAUD !== SERIAL_BAUDRATE) {
-          // MAKCU 握手：Web Serial 不支持在线改波特率——115200 开口发切速帧，
-          // 关口再以工作速率重开。设备已在工作速率（上次会话残留）时切速帧
-          // 是噪声被丢弃，重开同样对上
-          await port.open({ baudRate: MAKCU_BOOT_BAUD });
-          const w = port.writable.getWriter();
-          await w.write(makcuBaudSwitchFrame(SERIAL_BAUDRATE));
-          await w.releaseLock();
-          await new Promise(r => setTimeout(r, 60));
-          await port.close();
-          await new Promise(r => setTimeout(r, 30));
-        }
         await port.open({ baudRate: SERIAL_BAUDRATE });
-        serialPort = port;
-        serialReader = port.readable.getReader();
-        serialWriter = port.writable.getWriter();
+        reader = port.readable.getReader();
+        writer = port.writable.getWriter();
+        await writer.write(new TextEncoder().encode('km.version()\r\n'));
 
-        // 重置接收缓冲区
-        serialTextBuf = [];
-        // 启动读取循环
-        readSerialLoop();
+        let text = '';
+        const deadline = performance.now() + 500;
+        while (performance.now() < deadline) {
+          const remain = Math.max(1, deadline - performance.now());
+          const result = await Promise.race([
+            reader.read(),
+            serialSleep(remain).then(() => ({ timeout: true }))
+          ]);
+          if (result.timeout || result.done) break;
+          if (result.value) text += new TextDecoder().decode(result.value);
+          if (text.includes('km.MAKCU_V1.0')) return { reader, writer };
+        }
+      } catch (_) {
+        // 当前候选速率不匹配，交给下一档处理。
+      }
+      await closeSerialAttempt(port, reader, writer);
+      return null;
+    }
 
-        device = { opened: true, isSerial: true };
-        clearPipeline();
-        gpadStartOnDevice();
-        renderStatic();
+    async function trySerialBaud(port, probeBaud) {
+      let writer = null;
+      try {
+        await port.open({ baudRate: probeBaud });
+        writer = port.writable.getWriter();
+        await writer.write(makcuBaudSwitchFrame(SERIAL_BAUDRATE));
+        writer.releaseLock();
+        writer = null;
+        // 设备先排空旧速率 TX，再切到 4M；Web Serial 只能关口重开改速率。
+        await serialSleep(60);
+        await port.close();
+        await serialSleep(30);
+        return await openAndVerifyWorkRate(port);
+      } catch (_) {
+        if (writer) writer.releaseLock();
+        if (port.opened) await port.close().catch(() => { });
+        return null;
+      }
+    }
+
+    async function attachSerial(port) {
+      const tried = [];
+      try {
+        for (const probeBaud of MAKCU_BAUD_PROBE_RATES) {
+          tried.push(probeBaud);
+          const handles = await trySerialBaud(port, probeBaud);
+          if (!handles) continue;
+
+          serialPort = port;
+          serialReader = handles.reader;
+          serialWriter = handles.writer;
+          serialTextBuf = [];
+          readSerialLoop();
+
+          device = { opened: true, isSerial: true };
+          clearPipeline();
+          gpadStartOnDevice();
+          renderStatic();
+          return;
+        }
+        throw new Error('未能在候选波特率 ' + tried.join(', ') + ' 上确认 MAKCU');
       } catch (err) {
+        await closeSerialAttempt(port, null, null);
         console.error('串口打开失败:', err);
         throw err;
       }

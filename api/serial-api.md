@@ -23,7 +23,7 @@
 DE AD 05 00 A5 <baud:uint32 little-endian>
 ```
 
-设备不回复握手帧；主机等待短暂的 TX 排空时间后盲切到相同波特率。文本命令以 `\r` 或 `\n` 结束，例如 `km.version()`、`km.move(10,20)`、`km.baud()`。V2 帧格式为 `[50][CMD][LEN:u16 LE][payload]`；MAKCU 私有扩展帧格式为 `[55][AA][LEN:u8][CMD][payload]`。
+设备不回复握手帧；主机等待短暂的 TX 排空时间后盲切到相同波特率。由于运行期可以用 `km.baud(n)` 改成任意支持值，健壮的上位机应逐档尝试已知速率，并在切到工作速率后发送 `km.version()` 确认，不能只凭握手帧判断成功。当前 Web Serial 工具依次探测 `115200`、`921600`、`2000000`、`4000000`，确认 `km.MAKCU_V1.0` 后才显示连接成功；若设备被改成探测表之外的自定义速率，需要把该速率加入客户端探测表。文本命令以 `\r` 或 `\n` 结束，例如 `km.version()`、`km.move(10,20)`、`km.baud()`。V2 帧格式为 `[50][CMD][LEN:u16 LE][payload]`；MAKCU 私有扩展帧格式为 `[55][AA][LEN:u8][CMD][payload]`。
 
 ## 55 AA 私有扩展帧
 
@@ -41,7 +41,7 @@ DE AD 05 00 A5 <baud:uint32 little-endian>
 
 ```text
 115200: DE AD 05 00 A5 00 09 3D 00   # 请求切到 4000000
-4000000: km.version()\r\n
+4000000: km.version()\r\n           # 收到 km.MAKCU_V1.0 才确认链路
 4000000: km.baud(921600)\r\n          # 收到 ACK 后主机切到 921600
 921600:  km.baud()\r\n
 ```
