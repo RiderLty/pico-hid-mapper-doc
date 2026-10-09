@@ -37,7 +37,7 @@ features:
     details: 无需配置网络，USB网卡免驱，手机直连自动分配 IP。搭配 vPointer 端口转发，浏览器访问 Web UI。
   - icon: 🍎
     title: iPadOS / iPhone 适配
-    details: 目标平台一键切换，iPad / iPhone 直连后以触控板 + 鼠标形态出现（系统原生免驱），映射照常生效。
+    details: 目标平台一键切换（或选自动，设备识别主机系统自行切换），iPad / iPhone 直连后以触控板 + 鼠标形态出现（系统原生免驱），映射照常生效。
   - icon: 🛠️
     title: WebHID 控制
     details: 基于WebHID API的上位机控制工具，在浏览器中直接使用。
