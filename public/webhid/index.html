@@ -276,6 +276,11 @@
     <label><input type="checkbox" id="opt-kbd" checked> 全屏 + Keyboard Lock（可转发 Esc / Tab / Win 等系统键）</label>
     <label><input type="checkbox" id="opt-unadj" checked> unadjustedMovement（绕过系统鼠标加速曲线）</label>
     <label><input type="checkbox" id="opt-esc-single" checked> 单击 Esc 退出（Keyboard Lock 无需长按）</label>
+    <label><input type="checkbox" id="opt-lowlat"> 串口低延迟模式（6M 波特率）</label>
+    <span id="lowlat-warn" style="display:none;color:#e55;font-size:12px;line-height:1.6;margin:2px 0 6px">
+      ⚠ 低延迟模式：串口最终使用 6M 通讯，<b>可能出现不稳定</b>。<br>
+      本次会话中连接 MAKCU 前需先<b>重启开发板</b>（板子回到 115200 后由本页切到 6M）。
+    </span>
 
     <h3>Gamepad</h3>
     <div style="display:flex;white-space:nowrap"><span class="k">手柄</span><span class="v" id="g-st">未检测到</span></div>
@@ -349,7 +354,7 @@
     <div><span class="k">状态</span><span class="v" id="lua-st">—</span></div>
 
     <div id="hint">
-      ① <b>连接 HID</b> 或 <b>连接串口</b> → 选择设备（串口波特率 4M）。<br>
+      ① <b>连接 HID</b> 或 <b>连接串口</b> → 选择设备（串口常规 4M；勾选「低延迟模式」后 6M，需先重启开发板）。<br>
       ② <b>开始独占</b> → 键鼠被捕获并转发到 Pico。<br>
       ③ <b>手柄</b> → 即插即用，连接后自动转发（标准映射）。<br>
       ④ 退出：默认<b>单击 Esc</b>即可退出；关闭「单击 Esc 退出」开关后需<b>长按 Esc</b>。<br>
@@ -974,13 +979,25 @@
     let serialReader = null;
     let serialWriter = null;
     const SERIAL_BAUDRATE = 4000000;
-
+    const SERIAL_BAUDRATE_LOWLAT = 6000000;   // 低延迟模式工作速率（实测可用，恰在固件钳位边界内）
 
     // MAKCU 握手常量：固件开机 115200，主机发 DE AD 0xA5 切速帧后切到工作速率。
     // 设备可能被另一台上位机改到旧的运行速率，所以连接时逐档探测并用
     // km.version() 确认；协议本身没有自动协商回复，任意自定义速率需加入此表。
     const MAKCU_BOOT_BAUD = 115200;
-    const MAKCU_BAUD_PROBE_RATES = [MAKCU_BOOT_BAUD, 921600, 2000000, 4000000];
+    const MAKCU_BAUD_PROBE_RATES = [MAKCU_BOOT_BAUD, 921600, 2000000, SERIAL_BAUDRATE];
+    // 低延迟模式下探测表追加 6M 档：板子若已被上次会话留在 6M，重开同速发切速帧
+    // 是固件侧 no-op，验证照常通过，无需重启也能连上。
+    function makcuProbeRates() {
+      const work = serialWorkBaud();
+      return work === SERIAL_BAUDRATE
+        ? MAKCU_BAUD_PROBE_RATES
+        : [...MAKCU_BAUD_PROBE_RATES, work];
+    }
+    // 实际工作速率：低延迟开关决定（连接时读取，会话中途切换不生效）
+    function serialWorkBaud() {
+      return $('opt-lowlat').checked ? SERIAL_BAUDRATE_LOWLAT : SERIAL_BAUDRATE;
+    }
     function makcuBaudSwitchFrame(baud) {
       const f = new Uint8Array(9);
       f[0] = 0xDE; f[1] = 0xAD; f[2] = 0x05; f[3] = 0x00; f[4] = 0xA5;
@@ -1004,7 +1021,7 @@
       let reader = null;
       let writer = null;
       try {
-        await port.open({ baudRate: SERIAL_BAUDRATE });
+        await port.open({ baudRate: serialWorkBaud() });
         reader = port.readable.getReader();
         writer = port.writable.getWriter();
         await writer.write(new TextEncoder().encode('km.version()\r\n'));
@@ -1037,7 +1054,7 @@
       try {
         await port.open({ baudRate: probeBaud });
         writer = port.writable.getWriter();
-        await writer.write(makcuBaudSwitchFrame(SERIAL_BAUDRATE));
+        await writer.write(makcuBaudSwitchFrame(serialWorkBaud()));
         writer.releaseLock();
         writer = null;
         // 设备先排空旧速率 TX，再切到 4M；Web Serial 只能关口重开改速率。
@@ -1055,7 +1072,7 @@
     async function attachSerial(port) {
       const tried = [];
       try {
-        for (const probeBaud of MAKCU_BAUD_PROBE_RATES) {
+        for (const probeBaud of makcuProbeRates()) {
           tried.push(probeBaud);
           const handles = await trySerialBaud(port, probeBaud);
           if (!handles) continue;
@@ -1284,6 +1301,27 @@
 
     $('btn-disc').onclick = () => detachDevice();
 
+    // ===========================================================================
+    // 串口低延迟模式（6M）：localStorage 持久化 + 不稳定/重启警示
+    // ===========================================================================
+    const LOWLAT_KEY = 'webctrl_lowlat_serial';
+    try { $('opt-lowlat').checked = localStorage.getItem(LOWLAT_KEY) === '1'; } catch (_) { }
+    function applyLowlatUi() {
+      $('lowlat-warn').style.display = $('opt-lowlat').checked ? '' : 'none';
+    }
+    applyLowlatUi();
+    $('opt-lowlat').addEventListener('change', () => {
+      try { localStorage.setItem(LOWLAT_KEY, $('opt-lowlat').checked ? '1' : '0'); } catch (_) { }
+      applyLowlatUi();
+      // 工作速率在连接时读取，会话中途切换不生效：串口已连接则先断开，
+      // 提示用户重启开发板后重连（板子回到 115200，重连时再切到新速率）
+      if (device && device.isSerial) {
+        detachDevice();
+        $('d-st').textContent = '低延迟模式已切换，请重启开发板后重新连接';
+        $('d-st').className = 'v bad';
+      }
+    });
+
     $('lua-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendLua(); });
 
     window.addEventListener('beforeunload', () => { if (device) device.close(); });
@@ -1304,7 +1342,7 @@
       const on = !!(device && device.opened);
       $('d-st').textContent = on ? '已连接' : '未连接';
       $('d-st').className = 'v ' + (on ? 'ok' : 'bad');
-      $('d-type').textContent = on ? (device.isSerial ? '串口 (4M)' : 'HID') : '—';
+      $('d-type').textContent = on ? (device.isSerial ? '串口 (' + (serialWorkBaud() / 1000000) + 'M' + ($('opt-lowlat').checked ? ' 低延迟' : '') + ')' : 'HID') : '—';
       $('d-or').textContent = on ? orient : '—';
       $('btn-conn').disabled = on;
       $('btn-serial').disabled = on;
