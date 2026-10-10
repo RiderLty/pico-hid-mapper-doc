@@ -243,6 +243,23 @@
       flex-shrink: 0;
     }
 
+    /* ── DS5 直连（WebHID）原始报文打印 ── */
+    #ds5-dump {
+      margin-top: 8px;
+      padding: 6px 8px;
+      background: #161616;
+      border: 1px solid #333;
+      border-radius: 4px;
+      font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace;
+      color: #8c8;
+      white-space: pre;
+      overflow-x: auto;
+      max-height: 180px;
+      overflow-y: auto;
+      user-select: text;
+      display: none;
+    }
+
     body.grabbed #ui {
       opacity: .55;
     }
@@ -333,6 +350,17 @@
 
     <div id="g-btn-row" style="display:none"><span class="k">BTN</span><span id="g-btn-viz"></span></div>
 
+    <h3>DS5 直连（WebHID）</h3>
+    <div><span class="k">状态</span><span class="v" id="ds5-st">未连接</span></div>
+    <div><span class="k">报文速率</span><span class="v" id="ds5-hz">—</span></div>
+    <div><span class="k">转发速率</span><span class="v" id="ds5-out">—</span></div>
+    <div>
+      <button id="btn-ds5" class="primary">连接 DS5</button>
+      <button id="btn-ds5-disc" class="danger" disabled>断开</button>
+    </div>
+    <pre id="ds5-dump"></pre>
+    <label style="font-size:11px">连接后 Gamepad API 转发整体关断（可视化保留、其他手柄一并屏蔽），仅打印原始报文。</label>
+
     <h3>Pipeline</h3>
     <div><span class="k">输入事件速率</span><span class="v" id="p-in">0 Hz</span></div>
     <div><span class="k">HID 发送速率</span><span class="v" id="p-out">0 Hz</span></div>
@@ -356,7 +384,7 @@
     <div id="hint">
       ① <b>连接 HID</b> 或 <b>连接串口</b> → 选择设备（串口常规 4M；勾选「低延迟模式」后 6M，需先重启开发板）。<br>
       ② <b>开始独占</b> → 键鼠被捕获并转发到 Pico。<br>
-      ③ <b>手柄</b> → 即插即用，连接后自动转发（标准映射）。<br>
+      ③ <b>手柄</b> → 即插即用，连接后自动转发（标准映射）；连接 <b>DS5 直连</b> 后此通道整体关断（可视化保留）。<br>
       ④ 退出：默认<b>单击 Esc</b>即可退出；关闭「单击 Esc 退出」开关后需<b>长按 Esc</b>。<br>
     </div>
   </div>
@@ -378,6 +406,9 @@
     const EVT_ORIENTATION = 0x01;
     const CMD_LUA = 0xFA;    // payload → Lua on_custom_event(str)
     const SUB_GAMEPAD = 0xF9; // 手柄报文 16B → core_input_gamepad_abs/btn（0xFC 子命令）
+    const CMD_DS5 = 0xF8;    // DS5 裸报文直通：payload = dualsense_input_report body[0..39]
+                             // （到触摸点为止；固件补零还原 64B 后交 hidkit ds5_parse。
+                             //   全零 payload = 上位机断开，固件 umount 虚拟槽位释放按键）
 
     // ── MAKCU 串口通道 ──
     // 串口上固件只讲 MAKCU 协议：55 AA 控制帧是 MAKCU 的私有扩展帧型
@@ -863,7 +894,9 @@
         }
 
         // 仅在设备连接且状态变化时发送
-        if (device && device.opened && stateChanged) {
+        // DS5 直连（WebHID）期间 Gamepad API 转发整体关断：DS5 自己 + 其他手柄一律不发
+        // （可视化照常刷新，只是不向设备转发）
+        if (device && device.opened && stateChanged && !ds5Dev) {
           buildGamepadReport(ls_x, ls_y, rs_x, rs_y, lt, rt, btns);
           const sendPromise = device.isSerial
             ? sendSerial(gpadBuf)
@@ -1324,6 +1357,150 @@
 
     $('lua-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendLua(); });
 
+    // ===========================================================================
+    // DS5 直连（WebHID）—— DualSense 专用输入通道
+    // 报文布局见 webctrl/手柄陀螺仪视角映射-*.md；当前阶段仅原样打印报文，协议后续再接。
+    // 连接期间 Gamepad API 转发整体关断（pollGamepad 里的 !ds5Dev 门控）。
+    // ===========================================================================
+    const DS5_FILTERS = [
+      { vendorId: 0x054C, productId: 0x0CE6 }, // DualSense
+      { vendorId: 0x054C, productId: 0x0DF2 }, // DualSense Edge
+    ];
+    const ds5Hex16 = (v) => v.toString(16).padStart(4, '0');
+
+    let ds5Dev = null;        // 当前连接的 HIDDevice
+    let ds5StIn = 0;          // 报文计数（速率统计，独立 1s 窗口）
+    let ds5StOut = 0, ds5StErr = 0;  // 转发帧计数
+    let ds5HzT0 = performance.now();
+    let ds5Pending = null;    // 待打印的最新报文 {reportId, dv}
+
+    // ── 0xF8 转发帧：[55 AA][LEN=41][0xF8][body 0..39]，全长 44B，HID 64B 报文装得下 ──
+    const DS5_BODY_LEN = 40;
+    const ds5TxBuf = new Uint8Array(64);
+    function buildDs5Frame(body) {
+      ds5TxBuf.fill(0);
+      ds5TxBuf[0] = H0; ds5TxBuf[1] = H1;
+      ds5TxBuf[2] = 1 + DS5_BODY_LEN;   // LEN = CMD(1) + payload(40)
+      ds5TxBuf[3] = CMD_DS5;
+      ds5TxBuf.set(body, 4);
+    }
+    function sendDs5Frame(body) {
+      if (!device || !device.opened) return;
+      buildDs5Frame(body);
+      const sendPromise = device.isSerial
+        ? sendSerial(ds5TxBuf)
+        : device.sendReport(REPORT_ID, ds5TxBuf);
+      sendPromise.then(() => { ds5StOut++; }, () => { ds5StErr++; });
+    }
+
+    function ds5FmtDump(reportId, dv) {
+      const len = dv.byteLength;
+      let s = 'reportId=0x' + reportId.toString(16).padStart(2, '0') +
+        '  len=' + len + 'B\n';
+      for (let i = 0; i < len; i += 16) {
+        s += i.toString(16).padStart(2, '0') + ':';
+        for (let j = 0; j < 16; j++) {
+          if (i + j < len) s += ' ' + dv.getUint8(i + j).toString(16).padStart(2, '0');
+        }
+        s += '\n';
+      }
+      return s;
+    }
+
+    // WebHID 标准行为：event.data 不含 reportId（ID 在 event.reportId 里）。
+    // 防御性判断：长度恰为 64/78 且首字节 == reportId 时按含 ID 处理（off 偏移）。
+    function ds5OnReport(e) {
+      ds5StIn++;
+      const dv = new DataView(e.data.buffer, e.data.byteOffset, e.data.byteLength);
+      let off = 0;
+      if ((dv.byteLength === 64 || dv.byteLength === 78) && dv.getUint8(0) === e.reportId) off = 1;
+      ds5Pending = { reportId: e.reportId, off, dv };
+
+      // 0xF8 转发：body 0..39（到触摸点为止），固件补零还原后交 hidkit 消费
+      if (off + DS5_BODY_LEN <= dv.byteLength) {
+        sendDs5Frame(new Uint8Array(e.data.buffer, e.data.byteOffset + off, DS5_BODY_LEN));
+      }
+    }
+
+    // USB 约 1000Hz / 蓝牙约 250Hz，逐帧写 DOM 会被淹死：10Hz 节流打最新一帧原样 hex
+    setInterval(() => {
+      if (!ds5Dev || !ds5Pending) return;
+      $('ds5-dump').textContent = ds5FmtDump(ds5Pending.reportId, ds5Pending.dv);
+    }, 100);
+
+    async function attachDs5(dev) {
+      if (!dev.opened) await dev.open();
+      dev.oninputreport = ds5OnReport;   // 属性赋值而非 addEventListener，重复 attach 不叠加
+      ds5Dev = dev;
+      ds5StIn = 0;
+      ds5HzT0 = performance.now();
+      ds5Pending = null;
+      $('ds5-dump').style.display = '';
+      $('ds5-dump').textContent = '等待报文…';
+      renderDs5();
+    }
+
+    function detachDs5(note) {
+      if (ds5Dev) {
+        ds5Dev.oninputreport = null;
+        ds5Dev.close().catch(() => { });
+      }
+      ds5Dev = null;
+      ds5Pending = null;
+      // 断开时发一帧全零 body：固件约定全零 = 上位机断开，释放虚拟槽位
+      // （补发松开 + 六轴归零），避免按键残留
+      sendDs5Frame(new Uint8Array(DS5_BODY_LEN));
+      $('ds5-dump').style.display = 'none';
+      $('ds5-st').textContent = note || '未连接';
+      $('ds5-st').className = 'v ' + (note ? 'bad' : '');
+      $('ds5-hz').textContent = '—';
+      $('ds5-out').textContent = '—';
+      $('btn-ds5').disabled = false;
+      $('btn-ds5-disc').disabled = true;
+    }
+
+    function renderDs5() {
+      const on = !!ds5Dev;
+      $('btn-ds5').disabled = on;
+      $('btn-ds5-disc').disabled = !on;
+      $('ds5-st').textContent = on
+        ? '已连接 ' + ds5Hex16(ds5Dev.vendorId) + ':' + ds5Hex16(ds5Dev.productId)
+        : '未连接';
+      $('ds5-st').className = 'v ' + (on ? 'ok' : 'bad');
+    }
+
+    $('btn-ds5').onclick = async () => {
+      if (!navigator.hid) {
+        $('ds5-st').textContent = 'WebHID 不可用';
+        $('ds5-st').className = 'v bad';
+        return;
+      }
+      try {
+        // 已授权过的设备直接复用，不重复弹窗
+        let dev = (await navigator.hid.getDevices()).find(d =>
+          DS5_FILTERS.some(f => d.vendorId === f.vendorId && d.productId === f.productId));
+        if (!dev) {
+          [dev] = await navigator.hid.requestDevice({ filters: DS5_FILTERS });
+        }
+        if (!dev) return; // 用户取消选择
+        await attachDs5(dev);
+      } catch (err) {
+        console.error('DS5 连接失败:', err);
+        $('ds5-st').textContent = 'ERR: ' + err.message;
+        $('ds5-st').className = 'v bad';
+      }
+    };
+
+    $('btn-ds5-disc').onclick = () => detachDs5();
+
+    // 拔出 DS5：清理状态并恢复 Gamepad API 转发（门控随 ds5Dev 置空自动解除）
+    navigator.hid && navigator.hid.addEventListener('disconnect', (e) => {
+      if (e.device === ds5Dev) detachDs5('设备已拔出');
+    });
+
+    window.addEventListener('beforeunload', () => { if (ds5Dev) ds5Dev.close(); });
+
+
     window.addEventListener('beforeunload', () => { if (device) device.close(); });
 
     // ===========================================================================
@@ -1451,9 +1628,23 @@
 
       if (gpadActive) {
         const goutHz = gpadStOut / dt;
-        $('p-gout').textContent = goutHz.toFixed(1) + ' Hz';
+        $('p-gout').textContent = ds5Dev ? '已关断（DS5 直连）' : goutHz.toFixed(1) + ' Hz';
       } else {
-        $('p-gout').textContent = '—';
+        $('p-gout').textContent = ds5Dev ? '已关断（DS5 直连）' : '—';
+      }
+
+      // DS5 报文速率（独立 1s 窗口，与上面的统计窗互不干扰）
+      const ds5Now = performance.now();
+      const ds5Dt = ds5Now - ds5HzT0;
+      if (ds5Dt >= 1000) {
+        $('ds5-hz').textContent = ds5Dev ? Math.round(ds5StIn * 1000 / ds5Dt) + ' Hz' : '—';
+        $('ds5-out').textContent = ds5Dev
+          ? Math.round(ds5StOut * 1000 / ds5Dt) + ' Hz' + (ds5StErr ? '（ERR ' + ds5StErr + '）' : '')
+          : '—';
+        $('ds5-out').className = 'v ' + (ds5StErr ? 'bad' : 'ok');
+        ds5StIn = 0;
+        ds5StOut = 0; ds5StErr = 0;
+        ds5HzT0 = ds5Now;
       }
 
       if (dt > 1) resetStats();
