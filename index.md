@@ -76,4 +76,4 @@ features:
   <img src="/custom-board-2.jpg" alt="群友定制 RP2350A 键鼠映射板 接口" width="560" style="border-radius: 12px; margin: 8px; vertical-align: middle;">
 </div>
 
-👉 购买：[【闲鱼】自制RP2350A键鼠映射硬件板](https://m.tb.cn/h.8LxDIrl?tk=uGqUT5wZoPk)
+👉 购买：[【闲鱼】自制RP2350A键鼠映射硬件板](https://m.tb.cn/h.8AaQkvX?tk=SXrJTJu3PLy)

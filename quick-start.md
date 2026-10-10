@@ -18,7 +18,7 @@
 | 杜邦线（可选） | 通过 GPIO8（D+）/ GPIO9（D−）外接第二个 USB 键鼠设备（需自行焊接） |
 
 > 🛒 **不想动手？群友定制 RP2350A 键鼠映射板**：把上述接口集成到一块自制板子上——键鼠主机口、GPIO8 扩展 USB 主机口，Hurra 串口也板载了 USB 转串口（连电脑免焊接、免 USB-TTL 适配器）。固件刷写方式与微雪板完全一致。
-> 👉 [【闲鱼】自制RP2350A键鼠映射硬件板](https://m.tb.cn/h.8LxDIrl?tk=uGqUT5wZoPk)
+> 👉 [【闲鱼】自制RP2350A键鼠映射硬件板](https://m.tb.cn/h.8AaQkvX?tk=SXrJTJu3PLy)
 
 ## 第一步：刷入固件
 
