@@ -233,7 +233,7 @@ end
 payload 40 字节。将 DualSense（DS5）HID 输入报文的**前 40 字节**原样转发给设备，固件补零还原成完整 64B 报文后走与 USB Host 口实体手柄完全相同的解析链（hidkit `ds5_parse` → `core_input_gamepad_abs/btn/motion`），摇杆/按键/陀螺仪/加速度计全部进映射引擎，语义与插在 Host 口的 DS5 一致。
 
 ```
-55 AA 28 F8 [body 0..39 of dualsense_input_report]
+55 AA 29 F8 [body 0..39 of dualsense_input_report]
 ```
 
 | 偏移 | 字段 | 类型 | 说明 |
