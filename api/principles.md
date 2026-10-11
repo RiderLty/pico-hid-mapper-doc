@@ -78,7 +78,7 @@ PIO 口作为 USB Host，外接键鼠。插入的键盘/鼠标被枚举后，HID
 |----------|------|
 | 键盘按键 | 外接键盘 (Host 模式) / HIDAPI 命令 (Device 模式) |
 | 鼠标按键/移动/滚轮 | 外接鼠标 (Host 模式) / HIDAPI 命令 (Device 模式) |
-| 手柄摇杆/按键 | 外接手柄 — Host 模式 (DS5 / XInput) / HIDAPI CMD 0xF9 — Device 模式 |
+| 手柄摇杆/按键 | 外接手柄 — Host 模式 (DS5 / XInput / Switch Pro) / HIDAPI CMD 0xF9 — Device 模式 |
 | 自定义事件 | WebSocket / WebHID / HIDAPI 命令 |
 
 ### 输出类型
