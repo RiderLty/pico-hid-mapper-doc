@@ -9,12 +9,13 @@ pico-hid-mapper 内置 **Lua 5.4.6** 解释器，让你用脚本自定义按键/
 ## 数据流
 
 ```
-USB HID 设备 / 手柄 (Gamepad) / WebSocket / WebHID (键盘/鼠标/自定义事件)
+USB HID 设备 / 手柄 (Gamepad) / 触摸板 / WebSocket / WebHID (键盘/鼠标/自定义事件)
       │
       ▼
 映射引擎 (去抖 / 边沿检测)
       │  按键/按钮事件（仅"边沿"：按下、松开）
       │  鼠标移动/滚轮事件
+      │  触摸板瞬时快照（on_touchpad，变化时整帧上报）
       │  自定义字符串事件
       ▼
 Lua 引擎 (bitmap 过滤: 只有你声明监听的键/事件才进入 Lua VM)
@@ -22,7 +23,7 @@ Lua 引擎 (bitmap 过滤: 只有你声明监听的键/事件才进入 Lua VM)
       ▼
 你的 Lua 脚本
   on_key / on_mouse_btn / on_mouse_move / on_mouse_wheel
-  on_custom_event / on_boot_button / tick
+  on_custom_event / on_boot_button / on_touchpad / tick
       │  返回 true = 拦截, false = 放行
       ▼
 触摸事件队列 → USB HID 触屏 → 上位机 (手机/电脑)
@@ -166,6 +167,7 @@ end
 | `on_gamepad_btn(code, pressed)` | `code`: 手柄按键码 (0x01–0x1B, 见 [手柄按键码表](#手柄按键码)); `pressed`: bool | `true`=拦截 | 仅对 `enable_listen_gamepad_btn` 声明过的按键、边沿。 |
 | `on_custom_event(str)` | `str`: 字符串, 最大 **128 字节** (WS) / **60 字节** (HID) | `true`=拦截 | 外部通过 WebSocket (CMD 0x01) 或 HID CMD 0xFA 发送文本时触发。**无需 enable_listen**。 |
 | `on_boot_button(pressed)` | `pressed`: bool (true=按下, false=松开) | 忽略 | 板载 BOOTSEL 按键状态变化时触发 (固件消抖确认, 约 20–30ms 延迟)。**无需 enable_listen**, 无拦截语义, 仅定义了此函数的脚本才会收到事件。 |
+| `on_touchpad(meta, dims, x0, y0, ..., x9, y9)` | 见 [触摸板](#触摸板-on_touchpad) | 忽略 | 手柄触摸板快照：触点数据**变化时整帧上报**（固件逐字节去重，静止不调用）；拔出补发一帧全零。**无需 enable_listen**, 无拦截语义。 |
 | `tick(dt_us)` | `dt_us`: 距上次 tick 的微秒差 | 忽略 | 主循环限频调用, 约 10kHz (0.1ms 一次)。 |
 
 **拦截语义 (重要)**：
@@ -575,6 +577,7 @@ touch_up(id)
 - **单核单线程** (引擎在 core1，同核串行): 脚本内无需考虑并发。
 - **没有阻塞 sleep**: 回调必须立刻返回。如果需要使用sleep，用**协程** (见下文)。
 - **单次进入 VM 有 10ms 墙钟预算**: 固件每 2 万条指令轮询一次执行耗时，单次回调（含该次回调内恢复运行的所有协程分片）累计超过 10ms 即抛错中断，日志报 `script exceeded 10000us step budget (infinite loop?)`。正常回调只有几十~几百条指令（微秒级）；协程每片都极短，长期运行不受影响。真正的死循环（如 `while true do end`）会在预算内被拦下。
+- **`on_touchpad` 自带固件级节流**: 与上次分发的快照逐字节相同就不调用（手指静止零开销），但滑动时约等于手柄报文率（可达数百 Hz）——回调内只做差分/比较这类轻量计算，输出动作交给 `input_*` 或状态位，别在里面 print 每一帧。
 - **脚本大小 ≤ 64KB**。
 
 ---
@@ -1242,6 +1245,73 @@ end
 ```
 
 > 事件由 core0 消抖后经 IPC 投递 (约 20–30ms 延迟)，按下与松开各触发一次 `on_boot_button`。**无需 `enable_listen`** — 只要定义了此函数就会触发。
+
+### 触摸板 (on_touchpad)
+
+手柄触摸板（DS5 / DS Edge 及将来的触摸板设备）的**瞬时快照**通道：每次触点数据变化时调用一次，上报全部槽位的当前状态。**无需 `enable_listen`**（未定义此函数时零开销），**无拦截语义**（返回值被忽略）。
+
+```lua
+-- meta 位域：bit0-9 = 触点 i 在位｜bit10-13 = 设备最大点数｜bit14-19 = 来源枚举（0=DS5/DS Edge）｜其余保留
+-- dims 位域：bit0-15 = 宽 W｜bit16-31 = 高 H（DS5 为 1920 | 943<<16）
+-- x0..y9   : 各槽位坐标，**触摸板原始分辨率**（固件零换算，宽高比保真）；
+--            无效槽位恒 0。设备拔出时补发一帧全零快照（"设备已离开"信号）。
+function on_touchpad(meta, dims, x0, y0, x1, y1, x2, y2, x3, y3,
+                                  x4, y4, x5, y5, x6, y6, x7, y7, x8, y8, x9, y9) end
+```
+
+说明：
+
+- 固件对快照**逐字节去重**：与上次分发的快照完全相同就不调用——手指静止时不会刷屏；反过来，滑动的每一帧都会进来（约等于手柄报文率），回调里保持轻量。
+- 脚本可以**只声明需要的参数**（尾部多余的槽位实参被 Lua 自动丢弃），要全收就用 `...`。
+- 触摸板的**物理按压**（Pad Click）不在此通道——它走 `on_gamepad_btn` 的 `BTN_MISC` (0x0E)。
+- 调试建议：先用 `print(string.format("%d %d %d,%d", meta, dims, x0, y0))` 看原始流，确认去重与坐标行为后再往上叠逻辑。
+
+#### 例 1：光标控制（等同鼠标输入）
+
+按槽位差分出位移，注入 `input_mouse_move`——映射关闭时移动虚拟光标，映射开启时移动视角（与真实鼠标同管线）：
+
+```lua
+-- 触摸板 → 相对鼠标（笔记本触摸板手感）。DS5 有两个槽位，这里只用槽 0。
+local prev_x, prev_y = nil, nil
+local SENS = 3            -- 灵敏度倍率（原始分辨率 1920×943 的坐标差直接乘）
+
+function on_touchpad(meta, dims, x0, y0)
+    if meta & 0x1 ~= 0 then                   -- 槽 0 有手指
+        if prev_x then
+            input_mouse_move((x0 - prev_x) * SENS, (y0 - prev_y) * SENS)
+        end
+        prev_x, prev_y = x0, y0
+    else
+        prev_x, prev_y = nil, nil             -- 抬起：清基线，防止下次落指跳变
+    end
+end
+```
+
+#### 例 2：双指捏合 / 张开（简单手势）
+
+手势开始记两指距离，任一指抬起时比较起止距离——一个手势只报一次，不用计时器：
+
+```lua
+-- 距离用平方值即可比大小；阈值"×4"= 距离拉大一倍 / 缩小到一半
+local d0, d1, seeing = 0, 0, false
+
+function on_touchpad(meta, dims, x0, y0, x1, y1)
+    if meta & 0x3 == 0x3 then                 -- 两指都在
+        local dx, dy = x0 - x1, y0 - y1
+        local d = dx * dx + dy * dy
+        if not seeing then d0 = d end         -- 手势开始时的距离
+        d1 = d
+        seeing = true
+    elseif seeing then                        -- 任一指抬起 = 手势结束
+        if d1 > d0 * 4 then
+            print("张开")                     -- 这里换成任意动作
+        elseif d1 * 4 < d0 then
+            print("捏合")
+        end
+        seeing = false
+    end
+end
+```
 
 ### 空模板
 
