@@ -1315,58 +1315,27 @@ function on_touchpad(meta, dims, x0, y0, x1, y1)
 end
 ```
 
-#### 例 3：DS5 手柄观测台（按键 / 触摸板 / 陀螺仪状态）
+#### 例 3：触摸板观测（两个坐标 + 触摸板按压）
 
-最基础的调参脚本：按键边沿、触摸板触点、陀螺仪状态一览，全部打印到日志页。可以直接粘贴运行，作为写手势/映射逻辑前的"探针"：
+最基础的调参脚本：触点坐标和物理按压直接打印到日志页，粘贴即可运行：
 
 ```lua
--- DS5 观测台：按键边沿 + 触摸板触点 + 陀螺仪状态（tick 变化才打印，不刷屏）
-
--- 手柄按键：边沿打印（先声明要听哪些键；0x0F 为保留码无设备会发）
-local BTN_NAME = {
-    [0x01]="A",[0x02]="B",[0x03]="X",[0x04]="Y",[0x05]="LB",[0x06]="RB",
-    [0x07]="LT",[0x08]="RT",[0x09]="SELECT",[0x0A]="START",[0x0B]="LS",
-    [0x0C]="RS",[0x0D]="HOME",[0x0E]="TPCLICK",
-    [0x10]="十字↑",[0x11]="十字↓",[0x12]="十字←",[0x13]="十字→",
-}
-local codes = {}
-for c in pairs(BTN_NAME) do codes[#codes+1] = c end
-enable_listen_gamepad_btn(table.unpack(codes))
-
-function on_gamepad_btn(code, pressed)
-    print((pressed and "▼ " or "△ ") .. (BTN_NAME[code] or string.format("0x%02X", code)))
-end
-
--- 触摸板：固件已去重，变化即来
+-- 触点坐标：固件已去重，变化即来；全部抬起时打印一次"抬起"
 function on_touchpad(meta, dims, x0, y0, x1, y1)
     local c = meta & 0x3FF
-    if c == 0 then print("TP 抬起") return end
-    local n = (c & 1 ~= 0 and 1 or 0) + (c & 2 ~= 0 and 1 or 0)   -- 在位点数
-    local s = "TP " .. n .. " 点"
-    if c & 1 ~= 0 then s = s .. string.format("  P1=(%d,%d)", x0, y0) end
-    if c & 2 ~= 0 then s = s .. string.format("  P2=(%d,%d)", x1, y1) end
-    print(s)
+    if c == 0 then print("TP 抬起")
+    elseif c == 1 then print(string.format("P1=(%d,%d)", x0, y0))
+    elseif c == 2 then print(string.format("P2=(%d,%d)", x1, y1))
+    else print(string.format("P1=(%d,%d)  P2=(%d,%d)", x0, y0, x1, y1))
+    end
 end
 
--- 陀螺仪状态：tick 里 200ms 轮询一次，状态有变化才打印
-local last_st, last_ms = -1, 0
-function tick(dt_us)
-    local now = get_now_ms()
-    if now - last_ms < 200 then return end
-    last_ms = now
-    local st = get_gyro_state()
-    if st == last_st then return end
-    last_st = st
-    print(string.format("GYRO 0x%02X [总开关%s 配置%s 六轴%s 视角%s 飞鼠%s]", st,
-        st & 0x01 ~= 0 and "开" or "关",
-        st & 0x02 ~= 0 and "开" or "关",
-        st & 0x04 ~= 0 and "在线" or "离线",
-        st & 0x20 ~= 0 and "工作中" or "待机",
-        st & 0x80 ~= 0 and "工作中" or (st & 0x40 ~= 0 and "就绪" or "未启用")))
+-- 触摸板按压（Pad Click）是手柄按键 BTN_MISC(0x0E)，走按键边沿
+enable_listen_gamepad_btn(0x0E)
+function on_gamepad_btn(code, pressed)
+    if code == 0x0E then print(pressed and "TP 按下" or "TP 松开") end
 end
 ```
-
-观测要点：转动/翻动手柄 → `GYRO` 行的"六轴"应变"在线"；映射开启时推右摇杆或转手柄 → 出现"视角工作中"；绑定飞鼠切换键并按一下后 → "飞鼠工作中"（映射关闭时）。摇杆/扳机的**模拟值**目前没有 Lua 出口（只进映射引擎），按键只有边沿事件。
 
 ### 空模板
 
