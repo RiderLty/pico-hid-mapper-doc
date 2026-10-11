@@ -388,6 +388,7 @@ dmo_move(0, 0, -3)
 | `get_view_speed()` / `set_view_speed(x, y)` | 视角控制速度 (灵敏度)。 |
 | `set_view_auto_center(on)` | 视角越界时是否回到 `start_pos`。默认 `true`。 |
 | `set_view_auto_release_timeout(ms)` | 视角触点无移动多久 (毫秒) 后自动释放；`0` = 永不自动释放。默认 `400`。 |
+| `set_gyro_enable(on)` / `is_gyro_enable()` | **陀螺仪总开关**（默认开，运行时开关，重启恢复开）。关闭 = 全局屏蔽陀螺仪：视角辅助、生效时机、开镜/开火倍率、飞鼠**全部**不生效；打开后各按自己的配置生效（配置开关关着就还是关）。触摸板通道 `on_touchpad` **不受**此开关影响。 |
 ---
 
 ## 虚拟光标 (vmouse)
