@@ -82,7 +82,7 @@ export default defineConfig({
             { text: 'HIDAPI', link: '/api/hid-api' },
             { text: 'WebSocket API', link: '/api/ws-api' },
             { text: 'Lua 脚本 API', link: '/api/lua-api' },
-            { text: '串口协议（Hurra）', link: '/api/serial-api' },
+            { text: '串口协议（MAKCU + HID）', link: '/api/serial-api' },
             { text: 'HID 键码参考', link: '/api/hid-code' },
           ],
         },
