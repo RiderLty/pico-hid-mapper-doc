@@ -196,6 +196,10 @@ payload 16 字节。将上位机采集的标准手柄状态注入映射引擎，
 
 > 开机、保存、恢复默认、放弃预览之后，"生效值"与 flash 内容一致；只有预览期间两者不同。
 > 预览**不跨重启**，也不跨弹窗重新打开（面板打开时会先 `/gamepad/exit` 拉回 flash 值）。
+>
+> **面板上的「预览 / 放弃 / 保存」管整张弹窗**：它们会同时作用于 `gamepad_args` 与
+> `gyro_cal` 两个存储项（各走各自的端点）。`/gamepad/exit` 自身**只碰手柄参数**——
+> 它内部会重置视角/鼠标的积分累加器，但与陀螺仪校准和遥测流没有任何关系。
 
 默认参数：左/右摇杆死区 6.25%，回报率 500Hz，视角/鼠标灵敏度 1.0，曲线为空。详细参数格式见固件源码 `gamepad_args.h`。
 
@@ -206,15 +210,18 @@ payload 16 字节。将上位机采集的标准手柄状态注入映射引擎，
 | 接口 | 方法 | 说明 |
 |------|------|------|
 | `/gyro/cal` | GET | 返回校准 blob（24 字节，`application/octet-stream`）|
-| `/gyro/cal` | POST | 上传 blob 即时生效并持久化 |
+| `/gyro/cal` | POST | 上传 blob 即时生效 **并持久化**（＝保存）|
+| `/gyro/cal/preview` | POST | 上传 blob **只写运行期内存**即时生效，不碰 flash（＝预览）|
+| `/gyro/cal/exit` | POST | 放弃预览：从 flash 重读覆盖运行期值（**不写 flash**）；随后 GET `/gyro/cal` 即得到恢复后的值 |
+| `/gyro/cal` | GET | 返回**生效值**（预览中＝预览值，否则＝flash 值）|
 | `/gyro/cal/reset` | POST | 恢复默认参数并删除持久化 key |
 | `/gyro/cal/start` | POST | 开始手动校准（立即返回，结果经 WebSocket 回读）|
 | `/gyro/cal/cancel` | POST | 取消进行中的校准 |
-| `/gyro/cal/monitor` | POST | body `"0"` / `"1"` 开关实时遥测流（不持久化）|
+| `/gyro/cal/monitor` | POST | body `"0"` / `"1"` 开关实时遥测流（不持久化）。面板的判据是「分组展开 **且** 窗口在前台」，设备不会自己开或关它 |
 | `/gyro/cal/params` | POST | body `[flags u8][still_thr u16 LE]`，只改运行期参数（自动校准开关 + 静止阈值），不写 flash |
 | `/gyro/cal/state` | GET | 返回 32 字节运行期快照 |
 
-`GET /gyro/cal/state` 与 WebSocket 遥测帧同布局（见 [WebSocket API → 陀螺仪遥测](/api/ws-api#陀螺仪遥测帧-0x02)），字段顺序：`flags(1) cal_state(1) cal_progress(1) 保留(1) raw[3]i16 pp[3]u16 bias[3]i16 dead[3]u16 still_threshold u16 保留 u16`。
+`GET /gyro/cal/state` 与 WebSocket 遥测帧同布局（见 [WebSocket API → 陀螺仪遥测](/api/ws-api#陀螺仪遥测帧-0x02)），字段顺序：`flags(1) cal_state(1) cal_progress(1) 保留(1) raw[3]i16 pp[3]u16 bias[3]i16 dead[3]u16 still_threshold u16 保留 u16`。其中 `pp[3]` 是三轴**抖动幅度**（1 秒窗口内最大值减最小值；恒定零偏在此值里被抵消）。
 
 ---
 
