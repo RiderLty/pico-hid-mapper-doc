@@ -182,15 +182,39 @@ payload 16 字节。将上位机采集的标准手柄状态注入映射引擎，
 
 **手柄参数配置**（持久化存储）：
 
-手柄的摇杆死区、曲线、灵敏度等参数可通过 HTTP API 配置，写入 flash 持久保存：
+手柄的摇杆死区、曲线、灵敏度等参数可通过 HTTP API 配置。**「预览」只写设备内存、
+立即生效；「保存」才写入 flash** —— 反复试参数不会磨损 flash，也不会因为写 flash
+冻结总线而打断 USB：
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/gamepad/params` | GET | 返回当前参数 blob（122 字节，`application/octet-stream`）|
-| `/gamepad/params` | POST | 上传参数 blob 即时生效并持久化 |
+| `/gamepad/params` | GET | 返回当前**生效**参数 blob（122 字节，`application/octet-stream`）|
+| `/gamepad/params` | POST | 上传参数 blob 即时生效 **并持久化**（＝保存）|
+| `/gamepad/preview` | POST | 上传参数 blob **只写内存**即时生效，不碰 flash（＝预览）|
+| `/gamepad/exit` | POST | 放弃预览：从 flash 重读覆盖内存并重新应用（**不写 flash**）；随后 GET `/gamepad/params` 即得到恢复后的值 |
 | `/gamepad/reset` | POST | 恢复默认参数并删除持久化 key |
 
+> 开机、保存、恢复默认、放弃预览之后，"生效值"与 flash 内容一致；只有预览期间两者不同。
+> 预览**不跨重启**，也不跨弹窗重新打开（面板打开时会先 `/gamepad/exit` 拉回 flash 值）。
+
 默认参数：左/右摇杆死区 6.25%，回报率 500Hz，视角/鼠标灵敏度 1.0，曲线为空。详细参数格式见固件源码 `gamepad_args.h`。
+
+**陀螺仪校准**（设备级，不跟槽位走）：
+
+三轴零偏 / 死区 / 静止阈值 / 自动校准，见 [映射配置 → 陀螺仪校准](/api/mapper-config#陀螺仪校准)。HTTP 接口：
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/gyro/cal` | GET | 返回校准 blob（24 字节，`application/octet-stream`）|
+| `/gyro/cal` | POST | 上传 blob 即时生效并持久化 |
+| `/gyro/cal/reset` | POST | 恢复默认参数并删除持久化 key |
+| `/gyro/cal/start` | POST | 开始手动校准（立即返回，结果经 WebSocket 回读）|
+| `/gyro/cal/cancel` | POST | 取消进行中的校准 |
+| `/gyro/cal/monitor` | POST | body `"0"` / `"1"` 开关实时遥测流（不持久化）|
+| `/gyro/cal/params` | POST | body `[flags u8][still_thr u16 LE]`，只改运行期参数（自动校准开关 + 静止阈值），不写 flash |
+| `/gyro/cal/state` | GET | 返回 32 字节运行期快照 |
+
+`GET /gyro/cal/state` 与 WebSocket 遥测帧同布局（见 [WebSocket API → 陀螺仪遥测](/api/ws-api#陀螺仪遥测帧-0x02)），字段顺序：`flags(1) cal_state(1) cal_progress(1) 保留(1) raw[3]i16 pp[3]u16 bias[3]i16 dead[3]u16 still_threshold u16 保留 u16`。
 
 ---
 
