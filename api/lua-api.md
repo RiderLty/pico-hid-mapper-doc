@@ -172,7 +172,7 @@ end
 
 **拦截语义 (重要)**：
 
-- `on_key`/`on_mouse_btn` 返回 `true` → core 跳过对该键的**全部默认处理** (包括 Alt+F1~F9 切槽热键、鼠标切换键、WASD 轮盘、配置映射)。返回 `false` → Lua处理完毕后，交给映射继续处理原始逻辑。
+- `on_key`/`on_mouse_btn` 返回 `true` → core 跳过对该键的**全部默认处理** (包括「修饰键+数字行 1~9」切槽热键、鼠标切换键、WASD 轮盘、配置映射)。返回 `false` → Lua处理完毕后，交给映射继续处理原始逻辑。
 - **轮盘方向键（以及疾跑键）也走 `on_key`**：映射配置里「轮盘方向键」(`WHEEL.WASD`) 那四个键 (默认 W/A/S/D) 并不是被 core 提前吃掉的——它们和其它键一样先交给 Lua，`on_key` 返回 `true` 时轮盘不会动。反过来, 想让脚本看到它们同样必须 `enable_listen_keys(...)` 声明 (不声明就收不到)。默认模板只声明了 `KEY_P/KEY_1/KEY_2`, 所以"按 W 脚本没反应"通常是漏了这一步, 而不是被轮盘拦截。
 - `on_mouse_move`/`on_mouse_wheel` 返回 `true` → 对应位移量清零。**移动和滚轮分开判定**: 只拦截 `on_mouse_move` 不影响同帧滚轮，反之亦然。
 
@@ -371,7 +371,7 @@ dmo_move(0, 0, -3)
 | 函数 | 返回 | 说明 |
 |------|------|------|
 | `get_current_slot()` | `int` (0-8) | 当前激活的配置槽位索引。恒返回 0-8 有效值。 |
-| `set_current_slot(idx)` | 无 | 切换到槽位 `idx` (0-8)。非法值或空槽时保持当前槽位不变；目标槽为当前槽时自动跳过。请求异步应用且按 **200ms** 间隔限频——快速连切时仅最后一次生效，调用后立即 `get_current_slot()` 可能仍返回旧值。效果与热键 `Alt+F1~F9` 一致（F1 = 槽 0）。 |
+| `set_current_slot(idx)` | 无 | 切换到槽位 `idx` (0-8)。非法值或空槽时保持当前槽位不变；目标槽为当前槽时自动跳过。请求异步应用且按 **200ms** 间隔限频——快速连切时仅最后一次生效，调用后立即 `get_current_slot()` 可能仍返回旧值。效果与槽位热键（修饰键 + 数字行 1~9，1 = 槽 0）一致。 |
 
 ---
 
@@ -1227,7 +1227,7 @@ function on_boot_button(pressed)
         long_fired = false
     else
         if press_us and not long_fired then
-            -- 短按: 切到下一个槽位, 效果同 Alt+F1~F9 热键
+            -- 短按: 切到下一个槽位, 效果同槽位热键（修饰键+数字行 1~9）
             set_current_slot((get_current_slot() + 1) % 9)
         end
         press_us = nil
@@ -1384,4 +1384,4 @@ function tick(dt_us) end
 - **多个键共用一个触点变量** → 会串。用 `touches[keycode]` 表分开管理。
 - **`on_custom_event` 里忘了 `return true`** → core 虽无默认处理，但返回 `false` 表示 "未处理"。
 - **字符串超上限** → `on_custom_event` 的 `str` 会被截断 (WS:128B / HID:60B)。长指令用简短格式或拆分发送。
-- **手柄 SELECT+RS 组合键** → 同时按下 SELECT + RS (右摇杆按下) 会**切换映射开关**（与键盘 Alt+F1~F9 不同，这是开/关切换）。切换时虚拟光标自动显示/隐藏。此行为在 `on_gamepad_btn` 之前执行，Lua **无法拦截**这个组合键。
+- **手柄 SELECT+RS 组合键** → 同时按下 SELECT + RS (右摇杆按下) 会**切换映射开关**（与槽位切槽热键不同，这是开/关切换）。切换时虚拟光标自动显示/隐藏。此行为在 `on_gamepad_btn` 之前执行，Lua **无法拦截**这个组合键。
