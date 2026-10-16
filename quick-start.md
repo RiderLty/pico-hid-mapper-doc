@@ -92,7 +92,7 @@ Web UI 打开后：
 PIO 口支持两种控制方式：
 
 1. **上位机控制（默认 Device 模式）** — 上位机打开 **[WebHID 工具](/webhid/index.html)**（Chrome / Edge），连接 Pico 后通过 WebHID 发送键鼠报文
-2. **直连键鼠（Host 模式）** — 在 Web UI 中将 PIO 口切换为 Host 模式，通过 CH334 USB 2.0 Hub 连接键盘/鼠标到 PIO-USB-C 口。支持普通键盘、鼠标以及 NKRO 全键无冲键盘
+2. **直连键鼠（Host 模式）** — 在 Web UI 中将 PIO 口切换为 Host 模式，通过 CH334 USB 2.0 Hub 连接键盘/鼠标到 PIO-USB-C 口。外接键盘鼠标仅支持 1000Hz 回报率；支持普通键盘、鼠标以及 NKRO 全键无冲键盘
 
 > 未激活设备也可切换 Host 做基础输入测试：键盘 WASD 与飘号键，鼠标 X/Y、左键和中键，手柄 Select/RS/RT 按键、左右摇杆和 RT 模拟量。蓝牙 DS5 使用相同手柄白名单。其它输入需激活，详见[基础输入测试](/api/mapper-config#未激活设备的基础输入测试)。
 

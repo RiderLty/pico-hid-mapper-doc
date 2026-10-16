@@ -50,7 +50,7 @@ PIO 口作为 USB Device，通过 **HID 命令帧协议**接收上位机下发�
 
 ### Host 模式
 
-PIO 口作为 USB Host，外接键鼠。插入的键盘/鼠标被枚举后，HID 报告**自动喂入映射引擎**，引擎根据配置文件将按键/鼠标动作转为触屏事件。支持普通键盘、鼠标以及 NKRO 全键无冲键盘（键位段式的报告描述符会被自动识别解析）。
+PIO 口作为 USB Host，外接键鼠。Host 模式下外接键盘鼠标仅支持 1000Hz 回报率。插入的键盘/鼠标被枚举后，HID 报告**自动喂入映射引擎**，引擎根据配置文件将按键/鼠标动作转为触屏事件。支持普通键盘、鼠标以及 NKRO 全键无冲键盘（键位段式的报告描述符会被自动识别解析）。
 
 ```
 外接键鼠 → PIO-USB (Host) → 映射引擎 → 原生 USB → 手机/电脑
@@ -78,7 +78,7 @@ PIO 口作为 USB Host，外接键鼠。插入的键盘/鼠标被枚举后，HID
 |----------|------|
 | 键盘按键 | 外接键盘 (Host 模式) / HIDAPI 命令 (Device 模式) |
 | 鼠标按键/移动/滚轮 | 外接鼠标 (Host 模式) / HIDAPI 命令 (Device 模式) |
-| 手柄摇杆/按键 | 外接手柄 — Host 模式 (DS5 / XInput) / HIDAPI CMD 0xF9 — Device 模式 |
+| 手柄摇杆/按键 | 外接手柄 — Host 模式 (DS5 / XInput / Switch Pro) / HIDAPI CMD 0xF9 — Device 模式 |
 | 自定义事件 | WebSocket / WebHID / HIDAPI 命令 |
 
 ### 输出类型
