@@ -131,6 +131,32 @@ iPhone / iPad 使用前，先在系统设置里完成以下项目：
 
 安卓端安装后仍需 vPointer 保持运行；苹果端只要 Pico 保持连接。面板不会离线缓存，它显示的永远是设备上的当前状态；首次安装需要联网获取图标。
 
+### touch_forwarder 触屏转发
+
+`touch_forwarder` 在 Android 上读取物理触摸屏，并通过 TCP 转发给 Pico。客户端连接时接管触摸屏，断开后恢复手指操作；触点命中 Pico 的鼠标按键或视角区域时交给板子控制，其他触点继续正常转发，因此手指操作和板子映射可以同时使用。
+
+电脑连接手机并开启 USB 调试后执行：
+
+```sh
+curl -fL --retry 3 -o touch_forwarder_arm64 \
+  "https://1833788059.cdn.123clouddisk.com/1833788059/direct/projects/touch_forwarder/touch_forwarder_arm64#"
+adb push touch_forwarder_arm64 /data/local/tmp/touch_forwarder_arm64
+adb shell chmod 755 /data/local/tmp/touch_forwarder_arm64
+adb shell /data/local/tmp/touch_forwarder_arm64 -listen :6532
+```
+
+确认前台运行正常后，可让它脱离终端在后台运行，日志写入 `/data/local/tmp/touch_forwarder.log`：
+
+```sh
+adb shell "nohup /data/local/tmp/touch_forwarder_arm64 -listen :6532 >/data/local/tmp/touch_forwarder.log 2>&1 </dev/null &"
+```
+
+停止后台进程：
+
+```sh
+adb shell "kill \$(ps -A | awk '\$NF ~ /touch_forwarder_arm64/ {print \$2; exit}')"
+```
+
 ## 第四步：配置设备与映射
 
 进入配置面板后，先完成设备级设置，再编辑按键映射。
