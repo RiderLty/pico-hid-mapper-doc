@@ -167,7 +167,7 @@ end
 | `on_gamepad_btn(code, pressed)` | `code`: 手柄按键码 (0x01–0x1B, 见 [手柄按键码表](#手柄按键码)); `pressed`: bool | `true`=拦截 | 仅对 `enable_listen_gamepad_btn` 声明过的按键、边沿。 |
 | `on_custom_event(str)` | `str`: 字符串, 最大 **128 字节** (WS) / **60 字节** (HID) | `true`=拦截 | 外部通过 WebSocket (CMD 0x01) 或 HID CMD 0xFA 发送文本时触发。**无需 enable_listen**。 |
 | `on_boot_button(pressed)` | `pressed`: bool (true=按下, false=松开) | 忽略 | 板载 BOOTSEL 按键状态变化时触发 (固件消抖确认, 约 20–30ms 延迟)。**无需 enable_listen**, 无拦截语义, 仅定义了此函数的脚本才会收到事件。 |
-| `on_touchpad(meta, dims, x0, y0, ..., x9, y9)` | 见 [触摸板](#触摸板-on_touchpad) | 忽略 | 手柄触摸板快照：触点数据**变化时整帧上报**（固件逐字节去重，静止不调用）；拔出补发一帧全零。**无需 enable_listen**, 无拦截语义。 |
+| `on_touchpad(meta, dims, x0, y0, ..., x9, y9)` | 见 [触摸板](#触摸板-on-touchpad) | 忽略 | 手柄触摸板快照：触点数据**变化时整帧上报**（固件逐字节去重，静止不调用）；拔出补发一帧全零。**无需 enable_listen**, 无拦截语义。 |
 | `tick(dt_us)` | `dt_us`: 距上次 tick 的微秒差 | 忽略 | 主循环限频调用, 约 10kHz (0.1ms 一次)。 |
 
 **拦截语义 (重要)**：
