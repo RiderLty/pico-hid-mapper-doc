@@ -65,7 +65,7 @@ features:
 
 无需焊接、无需杜邦线。板子自带双 USB-C 口：
 - **原生 USB-C**（靠近 RST 和 BOOT 按钮的一侧）→ 连接安卓设备（USB网卡 (CDC) + HID 触屏）
-- **PIO-USB-C**（靠近 CC1、CC2 电阻的一侧）→ 默认 **Device 模式**（连接上位机接收 HID 指令），可切换为 Host 模式（直连键盘鼠标）
+- **PIO-USB-C**（靠近 CC1、CC2 电阻的一侧）→ 默认 **Host 模式**（直连键盘鼠标），可切换为 Device 模式（连接上位机接收 HID 指令）
 
 ### 可选硬件
 
