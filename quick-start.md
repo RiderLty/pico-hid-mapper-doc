@@ -137,25 +137,39 @@ iPhone / iPad 使用前，先在系统设置里完成以下项目：
 
 电脑连接手机并开启 USB 调试后执行：
 
+
+下载程序
 ```sh
-curl -fL --retry 3 -o touch_forwarder_arm64 \
-  "https://1833788059.cdn.123clouddisk.com/1833788059/direct/projects/touch_forwarder/touch_forwarder_arm64#"
+curl.exe -fL --retry 3 -o touch_forwarder_arm64 "https://1833788059.cdn.123clouddisk.com/1833788059/direct/projects/touch_forwarder/touch_forwarder_arm64"
+```
+推送到安卓
+```sh
 adb push touch_forwarder_arm64 /data/local/tmp/touch_forwarder_arm64
+```
+添加可执行权限
+```sh
 adb shell chmod 755 /data/local/tmp/touch_forwarder_arm64
-adb shell /data/local/tmp/touch_forwarder_arm64 -listen :6532
+```
+前台运行
+```sh
+adb shell /data/local/tmp/touch_forwarder_arm64 -listen :6532 -rot-cmd "dumpsys window"
 ```
 
-确认前台运行正常后，可让它脱离终端在后台运行，日志写入 `/data/local/tmp/touch_forwarder.log`：
+保持此窗口开启，即可兼容手搓，要关闭则使用ctrl+c快捷键
+
+
+<!-- 
+确认前台运行正常后，ctrl+c 结束运行 ，可让它脱离终端在后台运行，日志写入 `/data/local/tmp/touch_forwarder.log`：
 
 ```sh
-adb shell "nohup /data/local/tmp/touch_forwarder_arm64 -listen :6532 >/data/local/tmp/touch_forwarder.log 2>&1 </dev/null &"
+adb shell 'nohup /data/local/tmp/touch_forwarder_arm64 -listen :6532 -rot-cmd "dumpsys window" >/data/local/tmp/touch_forwarder.log 2>&1 </dev/null &'
 ```
 
 停止后台进程：
 
 ```sh
 adb shell "kill \$(ps -A | awk '\$NF ~ /touch_forwarder_arm64/ {print \$2; exit}')"
-```
+``` -->
 
 ## 第四步：配置设备与映射
 
@@ -206,7 +220,7 @@ adb shell "kill \$(ps -A | awk '\$NF ~ /touch_forwarder_arm64/ {print \$2; exit}
 
 激活流程：打开「PICO 配置 → 设备授权」，把「设备序列号」发给作者，获取激活码粘贴后点「激活」，验证通过立即生效，无需重启。激活码与硬件绑定，不能跨设备使用；
 
-恢复出厂设置会清除激活码，需要重新激活，激活码不变
+激活码固化在芯片 OTP 中，恢复出厂设置**不会**使激活失效，无需重新激活（旧固件升级后首次开机自动迁移）
 
 | 功能 | 普通版（未激活） | 高级版（激活） |
 |------|------------------|----------------|
@@ -256,7 +270,7 @@ adb shell "kill \$(ps -A | awk '\$NF ~ /touch_forwarder_arm64/ {print \$2; exit}
 | **配置面板** | PICO 配置 → 危险操作 → 恢复出厂设置 | 设备能正常启动、能访问配置面板 |
 | **GPIO strap** | 上电时短接 **GPIO29 与 3V3**，再连接电源供电 | 设备无法启动 / 无法访问配置面板 |
 
-> ⚠️ **恢复出厂设置会清除全部数据**，包括所有按键映射、PIO 模式、屏幕方向、手柄/轮盘参数、**授权激活码**与 Lua 脚本，设备重启回到出厂默认，且不可撤销。若设备已激活，恢复后需要重新激活。
+> ⚠️ **恢复出厂设置会清除全部数据**，包括所有按键映射、PIO 模式、屏幕方向、手柄/轮盘参数与 Lua 脚本，设备重启回到出厂默认，且不可撤销。**授权激活码不受影响**（固化在芯片 OTP，恢复出厂后仍为激活状态）。
 
 ## 进阶
 
