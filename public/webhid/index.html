@@ -951,12 +951,40 @@
     // ===========================================================================
     let unadjusted = false;
     let kbdLocked = false;
+    let grabPending = false;
+    let grabError = '';
 
     const $ = (id) => document.getElementById(id);
     initBtnViz(); // 现在 $ 已定义，安全调用
 
     async function acquireGrab() {
-      if (!device || !device.opened) return;
+      if (!device || !device.opened || grabPending) return;
+      grabPending = true;
+      grabError = '';
+      renderStatic();
+
+      // Pointer Lock 必须先在点击的同步调用链中发起。
+      // requestFullscreen() 会消耗 transient activation；两次请求之间不能 await。
+      const wantUnadjusted = $('opt-unadj').checked;
+      const pointerResult = (async () => {
+        try {
+          if (wantUnadjusted) {
+            await document.body.requestPointerLock({ unadjustedMovement: true });
+          } else {
+            await document.body.requestPointerLock();
+          }
+          unadjusted = wantUnadjusted;
+        } catch (err) {
+          unadjusted = false;
+          // 权限拒绝 / 手势失效不代表不支持原始位移，不能无条件再申请一次。
+          if (!wantUnadjusted || err.name !== 'NotSupportedError') throw err;
+          $('opt-unadj').checked = false;
+          if (navigator.userActivation && !navigator.userActivation.isActive) {
+            throw new Error('原始位移不受支持，已关闭该选项；请再次点击开始独占。');
+          }
+          await document.body.requestPointerLock();
+        }
+      })().then(() => null, err => err); // 立即接住拒绝，避免等待全屏 / 键盘权限时出现未处理异常
 
       if ($('opt-kbd').checked) {
         try {
@@ -969,23 +997,22 @@
         }
       }
 
-      try {
-        if ($('opt-unadj').checked) {
-          await document.body.requestPointerLock({ unadjustedMovement: true });
-          unadjusted = true;
-        } else {
-          await document.body.requestPointerLock();
-          unadjusted = false;
-        }
-      } catch (err) {
-        console.warn('unadjustedMovement 不支持，退回普通 pointer lock:', err);
-        unadjusted = false;
-        try { await document.body.requestPointerLock(); } catch (e2) { console.error(e2); }
+      const error = await pointerResult;
+      grabPending = false;
+      if (error) {
+        grabError = error.name === 'NotAllowedError'
+          ? '鼠标捕获未获授权，请再次点击开始独占或检查站点权限。'
+          : error.message;
+        releaseGrab(); // 捕获失败不能遗留全屏 / 键盘锁定
+        console.warn('Pointer Lock 申请失败:', error);
+      } else if (!device || !device.opened || document.pointerLockElement !== document.body) {
+        releaseGrab(); // 权限请求期间退出 / 断连时也清理已获准的键盘与全屏状态
       }
+      renderStatic();
     }
 
     function releaseGrab() {
-      document.exitPointerLock();
+      document.exitPointerLock?.();
       if (kbdLocked) { navigator.keyboard.unlock(); kbdLocked = false; }
       if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
     }
@@ -1524,13 +1551,13 @@
       $('btn-conn').disabled = on;
       $('btn-serial').disabled = on;
       $('btn-disc').disabled = !on;
-      $('btn-grab').disabled = !on;
+      $('btn-grab').disabled = !on || grabPending;
       $('btn-lua-send').disabled = !on;
-      $('btn-grab').textContent = grabbed ? '退出独占' : '开始独占';
+      $('btn-grab').textContent = grabPending ? '正在独占…' : (grabbed ? '退出独占' : '开始独占');
       $('btn-grab').classList.toggle('primary', !grabbed);
 
-      $('c-grab').textContent = grabbed ? 'on' : 'off';
-      $('c-grab').className = 'v ' + (grabbed ? 'ok' : '');
+      $('c-grab').textContent = grabbed ? 'on' : (grabError || 'off');
+      $('c-grab').className = 'v ' + (grabbed ? 'ok' : (grabError ? 'bad' : ''));
 
       // ── 手柄 ──
       if (gpadActive) {
