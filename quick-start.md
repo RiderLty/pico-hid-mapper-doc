@@ -152,7 +152,7 @@ adb shell chmod 755 /data/local/tmp/touch_forwarder_arm64
 ```
 前台运行
 ```sh
-adb shell /data/local/tmp/touch_forwarder_arm64 -listen :6532 -rot-cmd "dumpsys window"
+adb shell /data/local/tmp/touch_forwarder_arm64 -listen :6532 
 ```
 
 保持此窗口开启，即可兼容手搓，要关闭则使用ctrl+c快捷键
