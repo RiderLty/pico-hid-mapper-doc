@@ -4,17 +4,19 @@
 
 USB HID 键盘键码表。按键名使用 `defines.h` 中的宏名称。
 
+> **本文档所有键值一律写作十六进制**（`0x` 前缀），键盘、鼠标、手柄都一样。
+
 ---
 
 ## 鼠标按钮
 
 | 按钮 | 宏 | 值 |
 |------|-----|-----|
-| 左键 | `MOUSE_BUTTON_LEFT` | `0` |
-| 右键 | `MOUSE_BUTTON_RIGHT` | `1` |
-| 中键 | `MOUSE_BUTTON_MIDDLE` | `2` |
-| 后退 | `MOUSE_BUTTON_BACK` | `3` |
-| 前进 | `MOUSE_BUTTON_FORWARD` | `4` |
+| 左键 | `MOUSE_BUTTON_LEFT` | `0x00` |
+| 右键 | `MOUSE_BUTTON_RIGHT` | `0x01` |
+| 中键 | `MOUSE_BUTTON_MIDDLE` | `0x02` |
+| 后退 | `MOUSE_BUTTON_BACK` | `0x03` |
+| 前进 | `MOUSE_BUTTON_FORWARD` | `0x04` |
 
 ---
 

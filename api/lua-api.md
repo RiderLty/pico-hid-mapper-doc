@@ -61,7 +61,7 @@ input_*        → 回到上面的「映射引擎」入口       注入：当作
 ```lua
 -- 顶层: 声明要监听的键/鼠标按钮/移动/滚轮 (不声明 → 对应回调永远不触发)
 enable_listen_keys(0x13, 0x1E)              -- 监听 KEY_P、KEY_1 (HID 键码)
-enable_listen_mouse_btn(0, 1)               -- 监听鼠标左键(0)、右键(1)
+enable_listen_mouse_btn(0x00, 0x01)               -- 监听鼠标左键(0x00)、右键(0x01)
 -- enable_listen_mouse_move()               -- 监听鼠标相对移动
 -- enable_listen_mouse_wheel()              -- 监听鼠标滚轮
 
@@ -140,10 +140,13 @@ end
 
 固件里同时存在三套按键编号。**混用是脚本出错最常见的原因**——写任何涉及按键的脚本前，先确认自己在用哪一套。
 
+> **本文档所有键值一律写作十六进制**（`0x` 前缀），键盘、鼠标、手柄都一样。
+> 只有 bit 位号（`bit0`）、槽位号、触点编号这类"位置/序号"用十进制。
+
 | 编号 | 格式 | 谁用它 |
 |------|------|--------|
 | **统一 16 位 CODE** | 键盘 `0x000`–`0x0FF`、鼠标 `0x100+按钮`、手柄 `0x200\|按钮` | 配置与映射、动作状态：`get_code_map`、`get_code_action_state`、`is_code_down`，以及 `get_key_map_by_index()` 返回的 `code` |
-| **各设备原始编号** | 键盘 `1`–`254`、鼠标 `0`–`7`、手柄 `1`–`0x1B` | 实时输入：`on_key` / `on_mouse_btn` / `on_gamepad_btn`、`enable_listen_*`、`is_key_down` / `is_mouse_btn_down` / `is_gamepad_btn_down`、`input_*` |
+| **各设备原始编号** | 键盘 `0x00`–`0xFE`、鼠标 `0x00`–`0x07`、手柄 `0x01`–`0x1B` | 实时输入：`on_key` / `on_mouse_btn` / `on_gamepad_btn`、`enable_listen_*`、`is_key_down` / `is_mouse_btn_down` / `is_gamepad_btn_down`、`input_*` |
 | **宿主协议编号** | HID 键码 / 鼠标按钮位 | 打到手机/电脑：`dkb_key`、`dmo_btn` |
 
 ### 三种输入的 API 对照
@@ -171,10 +174,10 @@ end
 | 写法 | 结果 |
 |------|------|
 | `is_key_down(0x101)` | 恒 `false` —— 它只收键盘键码 |
-| `is_mouse_btn_down(0x101)` | 恒 `false` —— 它只收 0–7 |
-| `is_gamepad_btn_down(0x201)` | 恒 `false` —— 它只收 1–0x1B |
+| `is_mouse_btn_down(0x101)` | 恒 `false` —— 它只收 0x00–0x07 |
+| `is_gamepad_btn_down(0x201)` | 恒 `false` —— 它只收 0x01–0x1B |
 | 在 `on_gamepad_btn` 里把 `code` 直接传给 `get_code_map` | 查不到 —— 少了 `0x200` 前缀 |
-| 用 `dmo_btn(1)` / `dkb_key(0x101)` 混统一码 | 宿主编号是第三套，`dmo_btn` 只认 0–4、`dkb_key` 只认 HID 键码 |
+| 用 `dmo_btn(0x01)` / `dkb_key(0x101)` 混统一码 | 宿主编号是第三套，`dmo_btn` 只认 0x00–0x04、`dkb_key` 只认 HID 键码 |
 
 具体键值表见后面的「键码与按钮编号」。
 
@@ -186,7 +189,7 @@ end
 |------|------|
 | `enable_listen_keys(code1, code2, ...)` | 声明 `on_key` 要接收的 HID 键码 (0x00–0xFF, 可多个)。**不声明则 `on_key` 不触发。** 可多次调用 (累加)。每次脚本重载时清空。**轮盘方向键 (默认 W/A/S/D, HID 0x1A/0x04/0x16/0x07) 与疾跑键 (默认 Shift 0xE1) 也不例外**——想监听它们就得在这里声明。 |
 | `disable_listen_keys(code1, ...)` | 解除对指定键码的监听 (可多个)；**无参数则清空全部键监听**。 |
-| `enable_listen_mouse_btn(btn1, btn2, ...)` | 声明 `on_mouse_btn` 要接收的鼠标按钮 (0–7)。语义同上。 |
+| `enable_listen_mouse_btn(btn1, btn2, ...)` | 声明 `on_mouse_btn` 要接收的鼠标按钮 (0x00–0x07)。语义同上。 |
 | `disable_listen_mouse_btn(btn1, ...)` | 解除对指定按钮的监听 (variadic)；**无参数则清空全部按钮监听**。 |
 | `enable_listen_mouse_move()` | 开启 `on_mouse_move` 监听。 |
 | `disable_listen_mouse_move()` | 关闭 `on_mouse_move` 监听。 |
@@ -205,7 +208,7 @@ end
 |------|------|------|----------|
 | `init()` | 无 | 忽略 | 脚本重载时 + 每次配置/槽位变更时。用于缓存慢速值。 |
 | `on_key(keycode, down)` | `keycode`: HID 键码 (int); `down`: bool | `true`=拦截, `false`=放行 | 仅对 `enable_listen_keys` 声明过的键、且状态变化 (边沿) 时。 |
-| `on_mouse_btn(button, down)` | `button`: 0–7; `down`: bool | 同上 | 仅对 `enable_listen_mouse_btn` 声明过的按钮、边沿。 |
+| `on_mouse_btn(button, down)` | `button`: 0x00–0x07; `down`: bool | 同上 | 仅对 `enable_listen_mouse_btn` 声明过的按钮、边沿。 |
 | `on_mouse_move(dx, dy)` | `dx,dy`: 本次相对移动像素 (int, 可正可负) | `true`=拦截 (dx/dy 归零) | 已 `enable_listen_mouse_move` 且有移动时。 |
 | `on_mouse_wheel(wheel)` | `wheel`: 本次滚轮量 (int, 可正可负) | `true`=拦截 (wheel 归零) | 已 `enable_listen_mouse_wheel` 且有滚动时。 |
 | `on_gamepad_btn(code, pressed)` | `code`: 手柄按键码 (0x01–0x1B, 见 [手柄按键码表](#手柄按键码)); `pressed`: bool | `true`=拦截 | 仅对 `enable_listen_gamepad_btn` 声明过的按键、边沿。 |
@@ -252,14 +255,14 @@ end
 | `is_map_on()` | `bool` | 映射是否开启。 |
 | `set_map_on(on)` | `on`: bool | 设置映射开关。切换时自动清理触摸、复位视角/轮盘/vmouse。 |
 | `is_key_down(keycode)` | `bool` | 某键当前是否按下；支持修饰键 (0xE0–0xE7) 与普通键。持续检测建议用 `on_key` 事件而非轮询。 |
-| `is_mouse_btn_down(btn)` | `bool` | 某鼠标按键 (0–7) 当前是否按下。 |
-| `is_gamepad_btn_down(btn)` | `bool` | 某手柄按键 (1–0x1B) 当前是否按下，编号与 `on_gamepad_btn` / `input_gamepad_button` 一致。 |
+| `is_mouse_btn_down(btn)` | `bool` | 某鼠标按键 (0x00–0x07) 当前是否按下。 |
+| `is_gamepad_btn_down(btn)` | `bool` | 某手柄按键 (0x01–0x1B) 当前是否按下，编号与 `on_gamepad_btn` / `input_gamepad_button` 一致。 |
 | `is_code_down(code)` | `bool` | 按**统一 16 位 CODE** 查按下状态，跨设备通用（见下）。 |
 | `get_now_ms()` | `int32` | 开机至今毫秒 (约 24.8 天回绕)。 |
 | `get_rand_num(mini, max)` | `int32` | `[mini, max]` 闭区间随机整数。 |
 
 > **统一 16 位 CODE**：`0x000`–`0x0FF` = 键盘键码，`0x100+按钮` = 鼠标（右键 = `0x101`），`0x200|按钮` = 手柄（A = `0x201`）。
-> 三个 `is_*_down` 用**各设备的原始编号**（`is_key_down(0x1A)` 是 W，`is_mouse_btn_down(1)` 是右键，`is_gamepad_btn_down(0x01)` 是 A）；
+> 三个 `is_*_down` 用**各设备的原始编号**（`is_key_down(0x1A)` 是 W，`is_mouse_btn_down(0x01)` 是右键，`is_gamepad_btn_down(0x01)` 是 A）；
 > `is_code_down()` 用**统一码**。手里是哪种编号就用对应的那个——配置与映射相关（`get_code_map` / `get_key_map_by_index` / `get_code_action_state`）一律是统一码。
 
 ---
@@ -270,7 +273,7 @@ end
 
 | 函数 | 返回 / 参数 | 说明 |
 |------|-------------|------|
-| `get_code_map(code)` | `code`: unified keycode (0-254=HID 键盘键, 0x100+鼠标按键, 0x200+手柄按键) | `idx, type, flags, coord_count, interval_count` / 无映射返回 **nil**。`type`: 0=PRESS, 1=MULT_PRESS, 2=SMART_TOGGLE, 3=WHEEL, 4=CLICK, 5=AUTO_FIRE, 6=DRAG, 7=TOGGLE。`flags` 按 type 划分命名空间: SMART_TOGGLE bit0=RELEASE_MOUSE, bit1=SEPARAT, bit2=TOUCH; WHEEL bit0=松开后关闭映射 (RELEASE_MAP_OFF)。 |
+| `get_code_map(code)` | `code`: unified keycode (0x00–0xFE=HID 键盘键, 0x100+鼠标按钮, 0x200+手柄按键) | `idx, type, flags, coord_count, interval_count` / 无映射返回 **nil**。`type`: 0=PRESS, 1=MULT_PRESS, 2=SMART_TOGGLE, 3=WHEEL, 4=CLICK, 5=AUTO_FIRE, 6=DRAG, 7=TOGGLE。`flags` 按 type 划分命名空间: SMART_TOGGLE bit0=RELEASE_MOUSE, bit1=SEPARAT, bit2=TOUCH; WHEEL bit0=松开后关闭映射 (RELEASE_MAP_OFF)。 |
 | `get_key_map_by_index(idx)` | `idx`: 直接 key_maps 索引 (0-63) | `code, type, flags, coord_count, interval_count, coord_start, interval_start` / 越界返回 **nil**。用于遍历全部映射。 |
 | `get_key_coord(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `x, y, r_px` (触控坐标 + 像素级随机半径) / 越界返回三个 **nil**。 |
 | `get_key_interval(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `interval_ms` (毫秒) / 越界返回 **nil**。AUTO_FIRE 时 `step=0`=on_ms, `step=1`=off_ms。 |
@@ -344,8 +347,8 @@ end
 
 | 函数 | 参数 | 说明 |
 |------|------|------|
-| `input_keyboard(keycode, down)` | `keycode`: HID 键码 (0-254); `down`: bool | 注入键盘按下/释放。keycode 为 0 或 >254 则静默忽略。 |
-| `input_mouse_button(button, down)` | `button`: 0-7; `down`: bool | 注入鼠标按键。button 越界静默忽略。 |
+| `input_keyboard(keycode, down)` | `keycode`: HID 键码 (0x00–0xFE); `down`: bool | 注入键盘按下/释放。keycode 为 0x00 或 >0xFE 则静默忽略。 |
+| `input_mouse_button(button, down)` | `button`: 0x00–0x07; `down`: bool | 注入鼠标按键。button 越界静默忽略。 |
 | `input_mouse_move(dx, dy[, wheel])` | `dx,dy`: 相对位移 (像素); `wheel`: 滚轮 (默认 0) | 注入鼠标移动/滚轮。效果取决于 `map_on`: 映射开→移动视角; 映射关→移动 vmouse。 |
 | `input_gamepad_button(code, down)` | `code`: 手柄按键码 (0x01–0x1B, 见 [手柄按键码表](#手柄按键码)); `down`: bool | 注入手柄按键。code 越界 (≤0 或 >0x1B) 静默忽略。 |
 
@@ -357,8 +360,8 @@ input_keyboard(0x15, true)   -- KEY_R down
 input_keyboard(0x15, false)  -- KEY_R up
 
 -- 注入鼠标左键点击
-input_mouse_button(0, true)
-input_mouse_button(0, false)
+input_mouse_button(0x00, true)
+input_mouse_button(0x00, false)
 
 -- 注入鼠标向右移动 100 像素
 input_mouse_move(100, 0)
@@ -427,15 +430,15 @@ dkb_key(0xE0, true); dkb_key(0x06, true); dkb_key(0x06, false); dkb_key(0xE0, fa
 | 函数 | 参数 | 说明 |
 |------|------|------|
 | `dmo_move(dx, dy[, wheel])` | 相对位移（像素，正 dx = 右、正 dy = 下）；`wheel` 缺省 0，正 = 上滚 | 移动光标 / 滚动。纯滚动写 `dmo_move(0, 0, -1)`。 |
-| `dmo_btn(button, down)` | `button`: 0=左 1=右 2=中 3=后退 4=前进 | 按下 / 抬起一个鼠标键。 |
+| `dmo_btn(button, down)` | `button`: 0x00=左 0x01=右 0x02=中 0x03=后退 0x04=前进 | 按下 / 抬起一个鼠标键。 |
 | `dmo_release_all()` | 无 | 抬起 `dmo_` 按下过的所有键（插在设备上的物理鼠标不受影响）。 |
 | `dmo_is_on()` | 无 | 鼠标直通是否可用。 |
 | `dmo_state()` | 无 | 按键位图整数：bit0 左、bit1 右、bit2 中、bit3 后退、bit4 前进。 |
-| `dmo_is_down(button)` | `button`: 0–4 | 该鼠标键当前是否按下。 |
+| `dmo_is_down(button)` | `button`: 0x00–0x04 | 该鼠标键当前是否按下。 |
 
 按键状态与物理鼠标**各记一份**：脚本按住的键不会被物理鼠标的同键操作带掉，反之亦然。按下与抬起同样要自己配对。
 
-> `dmo_btn` 只认 5 个真实鼠标键（0–4）：滚轮伪键编号（5/6）在这里不接受，滚轮走 `dmo_move` 的第三个参数。
+> `dmo_btn` 只认 5 个真实鼠标键（0x00–0x04）：滚轮伪键编号（0x05/0x06）在这里不接受，滚轮走 `dmo_move` 的第三个参数。
 > 直通输出同样**不受「映射开关」影响**；`dmo_*` 任何时候都照发（未启用时除外）。
 
 > `dkb_state()` / `dkb_is_down()` / `dmo_state()` / `dmo_is_down()` 查的是**发给手机/电脑的状态**
@@ -445,8 +448,8 @@ dkb_key(0xE0, true); dkb_key(0x06, true); dkb_key(0x06, false); dkb_key(0xE0, fa
 -- 光标右移 200 像素，再点一下左键
 if dmo_is_on() then
     dmo_move(200, 0)
-    dmo_btn(0, true)
-    dmo_btn(0, false)
+    dmo_btn(0x00, true)
+    dmo_btn(0x00, false)
 end
 
 -- 滚轮下滚 3 格
@@ -658,11 +661,11 @@ touch_up(id)
 
 | 值 | 按钮 |
 |----|------|
-| 0 | 左键 |
-| 1 | 右键 |
-| 2 | 中键 |
-| 3 | 后退 |
-| 4 | 前进 |
+| `0x00` | 左键 |
+| `0x01` | 右键 |
+| `0x02` | 中键 |
+| `0x03` | 后退 |
+| `0x04` | 前进 |
 
 ### 手柄按键码
 
@@ -813,7 +816,7 @@ end
 ### 右键长按拖动 (触点跟随光标)
 
 ```lua
-enable_listen_mouse_btn(1)                    -- 鼠标右键
+enable_listen_mouse_btn(0x01)                    -- 鼠标右键
 local drag = nil
 
 function init()
@@ -843,7 +846,7 @@ end
 `on_mouse_move` 返回 `true` 会把本次 `dx/dy` 清零，core 的默认视角处理被跳过。下例：按住中键期间把移动转成 "在光标处拖动一个触点"。
 
 ```lua
-enable_listen_mouse_btn(2)         -- 中键
+enable_listen_mouse_btn(0x02)         -- 中键
 enable_listen_mouse_move()         -- 接管移动
 local dragging = false
 local drag_id  = 0xFF
@@ -855,7 +858,7 @@ function init()
 end
 
 function on_mouse_btn(button, down)
-    if button == 2 then
+    if button == 0x02 then
         dragging = down
         if not down and drag_id ~= 0xFF then
             touch_up(drag_id); drag_id = 0xFF
@@ -888,7 +891,7 @@ end
 
 ```lua
 -- 测量鼠标移动距离脚本（监听鼠标左键）
-enable_listen_mouse_btn(0)   -- 鼠标左键
+enable_listen_mouse_btn(0x00)   -- 鼠标左键
 enable_listen_mouse_move()
 
 local recording = false
@@ -902,7 +905,7 @@ function init()
 end
 
 function on_mouse_btn(button, down)
-    if button == 0 then
+    if button == 0x00 then
         if down and is_map_on() then
             recording = true
             total_dx = 0
@@ -934,7 +937,7 @@ end
 监听鼠标移动事件，并以100hz将鼠标移动打印在控制台
 ```lua
 
-enable_listen_mouse_btn(0)
+enable_listen_mouse_btn(0x00)
 enable_listen_mouse_move()
 
 -- 全局状态变量
@@ -955,8 +958,8 @@ end
 
 -- 鼠标按键事件 (边沿触发)
 function on_mouse_btn(button, down)
-    -- 仅响应鼠标左键 (button 0) 且需映射开启 (is_map_on)
-    if button == 0 and is_map_on() then
+    -- 仅响应鼠标左键 (button 0x00) 且需映射开启 (is_map_on)
+    if button == 0x00 and is_map_on() then
         if down then
             -- 按下左键：开始记录并重置数据
             is_recording = true
@@ -1008,7 +1011,7 @@ end
 
 ```lua
 
-enable_listen_mouse_btn(0)
+enable_listen_mouse_btn(0x00)
 -- -----------------------------------------------------------------
 -- 数据压缩区：一对一对填即可 [dx1, dy1,  dx2, dy2,  dx3, dy3, ...]
 -- -----------------------------------------------------------------
@@ -1031,7 +1034,7 @@ function init()
 end
 
 function on_mouse_btn(button, down)
-    if button == 0 and is_map_on() then
+    if button == 0x00 and is_map_on() then
         if down then
             is_firing = true
             current_step = 1
@@ -1074,7 +1077,7 @@ end
 引擎**没有阻塞式 sleep**。想写 "按下 → 等 50ms → 滑动 → 等 30ms → 抬起" 这种**带时序的顺序逻辑**，用协程：
 例如vmouse模式下，右键将物品拖动到丢弃区域
 ```lua
-enable_listen_mouse_btn(1)                     -- 右键
+enable_listen_mouse_btn(0x01)                     -- 右键
 local scale_x, scale_y = 1, 1
 local tasks = {}                                -- 协程调度队列
 
@@ -1096,7 +1099,7 @@ local function spawn(fn)
 end
 
 function on_mouse_btn(button, down)
-    if button == 1 and down then
+    if button == 0x01 and down then
         local mx, my = get_vmouse()             -- 快照按下瞬间的光标位置
         spawn(function()
             local id = touch_down(mx * scale_x, my * scale_y)
@@ -1214,9 +1217,9 @@ local function click_at_offset(dx, dy)
     spawn(function()
         dmo_move(dx, dy)
         sleep(20000)                      -- 等光标到位再点
-        dmo_btn(0, true)                  -- 0 = 左键
+        dmo_btn(0x00, true)                  -- 0 = 左键
         sleep(30000)                      -- 按住 30ms, 太短会被上位机忽略
-        dmo_btn(0, false)
+        dmo_btn(0x00, false)
     end)
 end
 
@@ -1246,7 +1249,7 @@ function on_custom_event(str)
             w[1], w[2], w[3], w[4],
             tostring(dkb_is_down(0x04)),        -- 0x04 = A
             dmo_state(),
-            tostring(dmo_is_down(0))))
+            tostring(dmo_is_down(0x00))))
     else
         warn("unknown cmd: " .. str)
     end
