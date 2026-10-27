@@ -195,6 +195,8 @@ USB HID 键盘键码表。按键名使用 `defines.h` 中的宏名称。
 
 ## 媒体键
 
+> `0xE8`–`0xFB` **不是标准 USB HID Usage ID**，是本固件扩展的媒体键段。标准键盘页只到 `0xE7`（右 GUI）。
+
 | 键 | 宏 | 键码 |
 |----|-----|------|
 | Play/Pause | `KEY_MEDIA_PLAYPAUSE` | `0xE8` |

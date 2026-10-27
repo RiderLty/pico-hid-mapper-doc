@@ -640,22 +640,24 @@ touch_up(id)
 
 ## 键码与按钮编号
 
-| 键 | 码 | 键 | 码 | 键 | 码 |
-|----|-----|----|-----|----|-----|
-| A–Z | `0x04`–`0x1D` | 1–9 | `0x1E`–`0x26` | 0 | `0x27` |
-| Enter | `0x28` | Esc | `0x29` | Backspace | `0x2A` |
-| Tab | `0x2B` | Space | `0x2C` | F1–F12 | `0x3A`–`0x45` |
-| → | `0x4F` | ← | `0x50` | ↓ | `0x51` |
-| ↑ | `0x52` | `` ` `` | `0x35` | | |
+### 键盘键码 = 标准 USB HID Usage ID
 
-**修饰键**：(想监听左 Ctrl 就 `enable_listen_keys(0xE0)`)
+键盘键码直接采用 **USB HID Usage ID（Keyboard/Keypad 页）**，与标准 HID 键盘描述符逐字节一致，没有私有换算。常见锚点：
 
 | 键 | 码 | 键 | 码 |
 |----|-----|----|-----|
-| 左 Ctrl | `0xE0` | 右 Ctrl | `0xE4` |
-| 左 Shift | `0xE1` | 右 Shift | `0xE5` |
-| 左 Alt | `0xE2` | 右 Alt | `0xE6` |
-| 左 Meta/Win | `0xE3` | 右 Meta/Win | `0xE7` |
+| A–Z | `0x04`–`0x1D` | 1–9 / 0 | `0x1E`–`0x26` / `0x27` |
+| Enter / Esc / Backspace | `0x28` / `0x29` / `0x2A` | Tab / Space | `0x2B` / `0x2C` |
+| F1–F12 | `0x3A`–`0x45` | F13–F24 | `0x68`–`0x73` |
+| 方向键 → ← ↓ ↑ | `0x4F`–`0x52` | 小键盘 | `0x53`–`0x63` |
+| 左/右 Ctrl | `0xE0` / `0xE4` | 左/右 GUI | `0xE3` / `0xE7` |
+
+修饰键按 Ctrl / Shift / Alt / GUI 顺序，左 `0xE0`–`0xE3`、右 `0xE4`–`0xE7`。
+
+表中没列的键（`- = [ ] \ ; ' , . /`、CapsLock、Insert/Home/PageUp/Delete/End/PageDown、国际键等）**按标准 HID 表取值即可**，全部宏名见 `defines.h`。
+
+> **唯一的例外**：`0xE8`–`0xFB` 不是标准 HID，是本固件扩展的媒体键：
+> `0xE8` 播放/暂停、`0xE9` 停止、`0xEA` 上一曲、`0xEB` 下一曲、`0xEC` 弹出、`0xED` 音量+、`0xEE` 音量−、`0xEF` 静音、`0xF0` WWW、`0xF1` 后退、`0xF2` 前进、`0xF3` 停止、`0xF4` 查找、`0xF5`/`0xF6` 滚轮上/下、`0xF7` 编辑、`0xF8` 睡眠、`0xF9` 咖啡、`0xFA` 刷新、`0xFB` 计算器。
 
 **鼠标按钮** (`on_mouse_btn` 的 `button`):
 
