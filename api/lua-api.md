@@ -136,6 +136,50 @@ end
 - **⚠️ 调试完成后，一定记得点击 "写入存储" 按钮，否则配置会在重启后丢失。**
 ---
 
+## 按键体系（三套编号，必读）
+
+固件里同时存在三套按键编号。**混用是脚本出错最常见的原因**——写任何涉及按键的脚本前，先确认自己在用哪一套。
+
+| 编号 | 格式 | 谁用它 |
+|------|------|--------|
+| **统一 16 位 CODE** | 键盘 `0x000`–`0x0FF`、鼠标 `0x100+按钮`、手柄 `0x200\|按钮` | 配置与映射、动作状态：`get_code_map`、`get_code_action_state`、`is_code_down`，以及 `get_key_map_by_index()` 返回的 `code` |
+| **各设备原始编号** | 键盘 `1`–`254`、鼠标 `0`–`7`、手柄 `1`–`0x1B` | 实时输入：`on_key` / `on_mouse_btn` / `on_gamepad_btn`、`enable_listen_*`、`is_key_down` / `is_mouse_btn_down` / `is_gamepad_btn_down`、`input_*` |
+| **宿主协议编号** | HID 键码 / 鼠标按钮位 | 打到手机/电脑：`dkb_key`、`dmo_btn` |
+
+### 三种输入的 API 对照
+
+| 能力 | 键盘 | 鼠标 | 手柄 |
+|------|------|------|------|
+| 声明监听 | `enable_listen_keys` | `enable_listen_mouse_btn` | `enable_listen_gamepad_btn` |
+| 事件回调 | `on_key(code, down)` | `on_mouse_btn(btn, down)` | `on_gamepad_btn(code, down)` |
+| 按住查询 | `is_key_down(code)` | `is_mouse_btn_down(btn)` | `is_gamepad_btn_down(btn)` |
+| 注入引擎 | `input_keyboard(code, down)` | `input_mouse_button(btn, down)` | `input_gamepad_button(code, down)` |
+| 查映射 | `get_code_map(code)` | 同左 | 同左 |
+| 动作状态 | `get_code_action_state(code)` | 同左 | 同左 |
+
+### 怎么选
+
+- **事件回调永远按设备分**：`on_key` / `on_mouse_btn` / `on_gamepad_btn` 各收各的原始编号，**回调参数不是统一码**。
+- **手里已经有统一码**（从 `get_key_map_by_index()` 遍历来的、配置里的疾跑键/切换键）→ 用 `is_code_down(code)`。
+- **已经知道是哪个设备** → 用分设备接口，编号更直白：`is_gamepad_btn_down(0x01)` 比 `is_code_down(0x201)` 好读。
+
+> **命名约定**：接受统一 CODE 的接口带 `*_code*`（`get_code_map` / `get_code_action_state` / `is_code_down`）；带 `key` / `mouse` / `gamepad` 的只收**该设备自己的原始编号**。
+> `get_key_map()` / `get_action_state()` 是改名前的兼容别名，与新名等价；新脚本请用新名。
+
+### 常见错误
+
+| 写法 | 结果 |
+|------|------|
+| `is_key_down(0x101)` | 恒 `false` —— 它只收键盘键码 |
+| `is_mouse_btn_down(0x101)` | 恒 `false` —— 它只收 0–7 |
+| `is_gamepad_btn_down(0x201)` | 恒 `false` —— 它只收 1–0x1B |
+| 在 `on_gamepad_btn` 里把 `code` 直接传给 `get_code_map` | 查不到 —— 少了 `0x200` 前缀 |
+| 用 `dmo_btn(1)` / `dkb_key(0x101)` 混统一码 | 宿主编号是第三套，`dmo_btn` 只认 0–4、`dkb_key` 只认 HID 键码 |
+
+具体键值表见后面的「键码与按钮编号」。
+
+---
+
 ## 声明 / 解除监听
 
 | 函数 | 说明 |
@@ -209,8 +253,14 @@ end
 | `set_map_on(on)` | `on`: bool | 设置映射开关。切换时自动清理触摸、复位视角/轮盘/vmouse。 |
 | `is_key_down(keycode)` | `bool` | 某键当前是否按下；支持修饰键 (0xE0–0xE7) 与普通键。持续检测建议用 `on_key` 事件而非轮询。 |
 | `is_mouse_btn_down(btn)` | `bool` | 某鼠标按键 (0–7) 当前是否按下。 |
+| `is_gamepad_btn_down(btn)` | `bool` | 某手柄按键 (1–0x1B) 当前是否按下，编号与 `on_gamepad_btn` / `input_gamepad_button` 一致。 |
+| `is_code_down(code)` | `bool` | 按**统一 16 位 CODE** 查按下状态，跨设备通用（见下）。 |
 | `get_now_ms()` | `int32` | 开机至今毫秒 (约 24.8 天回绕)。 |
 | `get_rand_num(mini, max)` | `int32` | `[mini, max]` 闭区间随机整数。 |
+
+> **统一 16 位 CODE**：`0x000`–`0x0FF` = 键盘键码，`0x100+按钮` = 鼠标（右键 = `0x101`），`0x200|按钮` = 手柄（A = `0x201`）。
+> 三个 `is_*_down` 用**各设备的原始编号**（`is_key_down(0x1A)` 是 W，`is_mouse_btn_down(1)` 是右键，`is_gamepad_btn_down(0x01)` 是 A）；
+> `is_code_down()` 用**统一码**。手里是哪种编号就用对应的那个——配置与映射相关（`get_code_map` / `get_key_map_by_index` / `get_code_action_state`）一律是统一码。
 
 ---
 
@@ -220,16 +270,20 @@ end
 
 | 函数 | 返回 / 参数 | 说明 |
 |------|-------------|------|
-| `get_key_map(code)` | `code`: unified keycode (0-254=HID 键盘键, 0x100+鼠标按键) | `idx, type, flags, coord_count, interval_count` / 无映射返回 **nil**。`type`: 0=PRESS, 1=MULT_PRESS, 2=SMART_TOGGLE, 3=WHEEL, 4=CLICK, 5=AUTO_FIRE, 6=DRAG, 7=TOGGLE。`flags` 按 type 划分命名空间: SMART_TOGGLE bit0=RELEASE_MOUSE, bit1=SEPARAT, bit2=TOUCH; WHEEL bit0=松开后关闭映射 (RELEASE_MAP_OFF)。 |
+| `get_code_map(code)` | `code`: unified keycode (0-254=HID 键盘键, 0x100+鼠标按键, 0x200+手柄按键) | `idx, type, flags, coord_count, interval_count` / 无映射返回 **nil**。`type`: 0=PRESS, 1=MULT_PRESS, 2=SMART_TOGGLE, 3=WHEEL, 4=CLICK, 5=AUTO_FIRE, 6=DRAG, 7=TOGGLE。`flags` 按 type 划分命名空间: SMART_TOGGLE bit0=RELEASE_MOUSE, bit1=SEPARAT, bit2=TOUCH; WHEEL bit0=松开后关闭映射 (RELEASE_MAP_OFF)。 |
 | `get_key_map_by_index(idx)` | `idx`: 直接 key_maps 索引 (0-63) | `code, type, flags, coord_count, interval_count, coord_start, interval_start` / 越界返回 **nil**。用于遍历全部映射。 |
 | `get_key_coord(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `x, y, r_px` (触控坐标 + 像素级随机半径) / 越界返回三个 **nil**。 |
 | `get_key_interval(key_map_idx, step)` | 映射索引 + 步号 (0-based) | `interval_ms` (毫秒) / 越界返回 **nil**。AUTO_FIRE 时 `step=0`=on_ms, `step=1`=off_ms。 |
 
-典型用法: 由 `get_key_map(code)` 拿到 `coord_count/interval_count`, 再用 `get_key_coord(idx,i)` / `get_key_interval(idx,i)` 逐条读出。
+> **命名约定**：接受**统一 16 位 CODE** 的接口一律用 `*_code_*` / `*_code`（`get_code_map` / `get_code_action_state` / `is_code_down`），
+> 带 `key` / `mouse` / `gamepad` 字样的接口只收**该设备自己的原始编号**。`get_key_map()` 是 `get_code_map()` 的旧名，作为兼容别名保留。
+> 另外 `get_key_map_by_index` / `get_key_coord` / `get_key_interval` 里的 `key_map` 指**映射条目**（不是键盘），它们按索引取值、与设备无关。
+
+典型用法: 由 `get_code_map(code)` 拿到 `coord_count/interval_count`, 再用 `get_key_coord(idx,i)` / `get_key_interval(idx,i)` 逐条读出。
 
 ```lua
 -- 查看 KEY_P (0x13) 的映射详情
-local idx, typ, flags, ccnt, icnt = get_key_map(0x13)
+local idx, typ, flags, ccnt, icnt = get_code_map(0x13)
 if idx then
     print(string.format("P: idx=%d type=%d flags=%d", idx, typ, flags))
     for i = 0, ccnt - 1 do
@@ -244,6 +298,41 @@ for i = 0, 63 do
     if code and code ~= 0 then
         print(string.format("idx=%d code=0x%x type=%d", i, code, typ))
     end
+end
+```
+
+---
+
+## 动作运行状态
+
+查询**映射引擎此刻正在执行的按键动作**（运行态，不是配置，也不是输入状态）。
+
+用途：判断 TOGGLE / 连发 / 自动释放这类动作的**触点**是否按着。注意 `is_key_down()` 只反映按键本身——
+TOGGLE 松开按键后触点照样保持，两者并不等价。
+
+| 函数 | 参数 | 说明 |
+|------|------|------|
+| `get_code_action_state(code)` | `code`: 统一 16 位 CODE | `state, type, touch_ids, step, total, timer_us` / 该键当前**没有**进行中的动作返回 **nil**。旧名 `get_action_state()` 作为兼容别名保留。 |
+
+`code` 编法与 `get_code_map()` 一致：`0x000-0x0FF` = 键盘键码，`0x100+按钮` = 鼠标键（右键 = `0x101`），`0x200+按钮` = 手柄键。
+
+| 字段 | 含义 |
+|------|------|
+| `state` | `1`=ACTIVE（动作推进中；**TOGGLE 下即"触点保持按下"**）、`2`=HELD（等松键）、`3`=RELEASING（反向释放中） |
+| `type` | `ACTION_*` 编号，与 `get_code_map()` 的 `type` 同口径 |
+| `touch_ids` | 位图，bit N = 本动作正持有触点 N；**非 0 即"触点按着"** |
+| `step` / `total` | 分段动作（MULT_PRESS / DRAG / AUTO_FIRE / SHORT_LONG）的进度 |
+| `timer_us` | 剩余计时（微秒），无计时为 0 |
+
+> 该查询与映射引擎同核（core1），在 `on_key` / `on_mouse_btn` / `tick` 里直接调用即可，无需加锁。
+> 想做"按住期间持续动作"就用 `tick` 轮询它；只关心边沿则在自己的 `on_*` 里查一次。
+
+```lua
+local st, typ, touches = get_code_action_state(0x101)  -- 右键绑定的 TOGGLE
+if st == nil then
+    print("该键没有进行中的动作")
+elseif touches ~= 0 then
+    print("触点按着", string.format("0x%X", touches))
 end
 ```
 
@@ -594,6 +683,7 @@ touch_up(id)
 | `0x0D` | HOME / Guide / PS | | |
 | `0x0E` | MISC (触控板 / Mute) | | |
 
+> 三套编号的分工、API 对照与常见错误见前面的「按键体系」一节。
 > 完整键码表见 [HID 键码参考](/api/hid-code)。
 
 ---
