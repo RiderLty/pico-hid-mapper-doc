@@ -152,24 +152,65 @@ adb shell chmod 755 /data/local/tmp/touch_forwarder_arm64
 ```
 前台运行
 ```sh
-adb shell /data/local/tmp/touch_forwarder_arm64 -listen :6532 
+adb shell /data/local/tmp/touch_forwarder_arm64 -listen :6532
 ```
 
-保持此窗口开启，即可兼容手搓，要关闭则使用ctrl+c快捷键
+保持此窗口开启即可兼容手搓，要关闭则使用 Ctrl+C。
 
+#### 后台运行（推荐）
 
-<!-- 
-确认前台运行正常后，ctrl+c 结束运行 ，可让它脱离终端在后台运行，日志写入 `/data/local/tmp/touch_forwarder.log`：
+以下命令默认在 **cmd.exe（命令提示符）** 中执行。Windows 的 cmd 不会展开 `$`，整条命令原样传给手机，直接复制粘贴即可；不要在 PowerShell 中执行含 `$` 的命令（PowerShell 会把双引号里的 `$` 当作自己的变量展开，导致命令错误）。
+
+前台运行确认正常后，按 Ctrl+C 结束，再执行：
 
 ```sh
-adb shell 'nohup /data/local/tmp/touch_forwarder_arm64 -listen :6532 -rot-cmd "dumpsys window" >/data/local/tmp/touch_forwarder.log 2>&1 </dev/null &'
+adb shell "nohup /data/local/tmp/touch_forwarder_arm64 -listen :6532 >/data/local/tmp/touch_forwarder.log 2>&1 </dev/null &"
 ```
 
-停止后台进程：
+程序随即脱离当前窗口持续运行：关掉 cmd 窗口、拔掉 USB 线都不影响，触摸转发照常工作。所有输出写入手机上的 `/data/local/tmp/touch_forwarder.log`，后台进程不会在窗口里打印任何内容。
+
+**查看日志**（Ctrl+C 只退出 tail，不影响手机上的转发进程）：
 
 ```sh
-adb shell "kill \$(ps -A | awk '\$NF ~ /touch_forwarder_arm64/ {print \$2; exit}')"
-``` -->
+adb shell tail -f /data/local/tmp/touch_forwarder.log
+```
+
+其他常用查看方式：
+
+```sh
+adb shell tail -n 200 /data/local/tmp/touch_forwarder.log
+adb shell ls -lh /data/local/tmp/touch_forwarder.log
+```
+
+**确认在运行**（grep 有输出即正常）：
+
+```sh
+adb shell "ps -A | grep touch_forwarder_arm64"
+adb shell "netstat -tln | grep 6532"
+```
+
+**停止后台进程并确认结果**：`kill` 成功时命令本身不打印任何内容，所以下面用 `echo` 把 PID 和执行结果显示出来，并在 1 秒后复查进程；显示 `process stopped` 才是真正退出：
+
+```sh
+adb shell "PID=$(ps -A | awk '$NF ~ /touch_forwarder_arm64/ {print $2; exit}'); echo PID=$PID; kill $PID && echo 'kill sent'; sleep 1; ps -A | grep touch_forwarder_arm64 || echo 'process stopped'"
+```
+
+几秒后进程仍在时，用 `kill -9` 强制结束并同样确认：
+
+```sh
+adb shell "PID=$(ps -A | awk '$NF ~ /touch_forwarder_arm64/ {print $2; exit}'); echo PID=$PID; kill -9 $PID && echo 'kill -9 sent'; sleep 1; ps -A | grep touch_forwarder_arm64 || echo 'process stopped'"
+```
+
+优先使用普通 `kill`（正常退出路径、释放触屏接管）；`kill -9` 由系统直接回收进程、不做任何清理，仅在进程卡死无响应时使用。
+
+**重新启动前**：如需保留旧日志，先改名备份——上面的启动命令用 `>` 重定向，每次启动都会清空同名日志：
+
+```sh
+adb shell mv /data/local/tmp/touch_forwarder.log /data/local/tmp/touch_forwarder.log.old
+```
+
+> 停止后台进程也可以直接在 vPointer 所在手机的终端类 App 中执行同样的命令（去掉 `adb shell` 和外层引号）。
+
 
 ## 第四步：配置设备与映射
 
