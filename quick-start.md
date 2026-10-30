@@ -133,13 +133,11 @@ iPhone / iPad 使用前，先在系统设置里完成以下项目：
 
 ### touch_forwarder 触屏转发
 
-`touch_forwarder` 运行在安卓手机上：读取物理触摸屏，把多点触摸事件通过 TCP 6532 端口转发给 Pico。Pico 连接时独占触摸屏，断开后自动恢复手指操作；触点命中 Pico 的鼠标按键或视角区域时交给板子执行映射，其余触点照常转发——手指操作和板子映射可以同时使用。
-
-以下命令在 cmd.exe、PowerShell 或手机本地终端中都可以直接执行，没有引号转义问题。
+`touch_forwarder` 运行在安卓手机上，可实现手搓与开发板共同工作不冲突
 
 #### 安装
 
-电脑连接手机并开启 USB 调试后执行：
+adb 连接PC后，在PC的终端执行：
 
 ```sh
 curl.exe -fL --retry 3 -o touch_forwarder_arm64 "https://1833788059.cdn.123clouddisk.com/1833788059/direct/projects/touch_forwarder/touch_forwarder_arm64"
@@ -147,28 +145,26 @@ adb push touch_forwarder_arm64 /data/local/tmp/touch_forwarder_arm64
 adb shell chmod 755 /data/local/tmp/touch_forwarder_arm64
 ```
 
-#### 前台试跑
+#### 测试运行
 
 ```sh
 adb shell /data/local/tmp/touch_forwarder_arm64
 ```
 
-看到「监听 :6532，等待客户端…」即工作正常，Ctrl+C 退出。前台可加 `-v` 逐触点调试、`-force-view` 强制视角转换等参数，`-h` 查看全部。
+看到「监听 :6532，等待客户端…」即工作正常，Ctrl+C 退出，此时插入开发板即可手搓不冲突。
 
-#### 后台运行（推荐）
+#### 后台运行
 
-前台确认正常后，一条命令转入后台：
+测试正常后，使用如下命令进入后台运行，之后PC可断开，保持usb调试开启即可：
 
 ```sh
 adb shell /data/local/tmp/touch_forwarder_arm64 start
 ```
 
 - 程序脱离终端持续运行：关掉 cmd 窗口、拔掉 USB 线都不影响
-- 触摸设备故障会自动按退避重启（2 秒起步，最长一分钟一次），长期运行无需照看
 - 只有 `stop`、手机重启或系统强杀会让它停下；手机重启后重新执行一次 `start` 即可
-- 日志写入手机 `/data/local/tmp/touch_forwarder.log`，超过 512KB 自动轮转，不会无限变大；后台模式忽略 `-v`
 
-#### 日常管理
+#### 管理命令
 
 ```sh
 adb shell /data/local/tmp/touch_forwarder_arm64 status    # 运行状态：pid、已运行时长、日志大小
