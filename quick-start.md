@@ -133,53 +133,50 @@ iPhone / iPad 使用前，先在系统设置里完成以下项目：
 
 ### touch_forwarder 触屏转发
 
-`touch_forwarder` 在 Android 上读取物理触摸屏，并通过 TCP 转发给 Pico。客户端连接时接管触摸屏，断开后恢复手指操作；触点命中 Pico 的鼠标按键或视角区域时交给板子控制，其他触点继续正常转发，因此手指操作和板子映射可以同时使用。
-
-电脑连接手机并开启 USB 调试后执行：
-
-
-下载程序
-```sh
-curl.exe -fL --retry 3 -o touch_forwarder_arm64 "https://1833788059.cdn.123clouddisk.com/1833788059/direct/projects/touch_forwarder/touch_forwarder_arm64"
-```
-推送到安卓
-```sh
-adb push touch_forwarder_arm64 /data/local/tmp/touch_forwarder_arm64
-```
-添加可执行权限
-```sh
-adb shell chmod 755 /data/local/tmp/touch_forwarder_arm64
-```
-前台运行
-```sh
-adb shell /data/local/tmp/touch_forwarder_arm64 -listen :6532
-```
-
-保持此窗口开启即可兼容手搓，要关闭则使用 Ctrl+C。
-
-#### 后台运行（推荐）
+`touch_forwarder` 运行在安卓手机上：读取物理触摸屏，把多点触摸事件通过 TCP 6532 端口转发给 Pico。Pico 连接时独占触摸屏，断开后自动恢复手指操作；触点命中 Pico 的鼠标按键或视角区域时交给板子执行映射，其余触点照常转发——手指操作和板子映射可以同时使用。
 
 以下命令在 cmd.exe、PowerShell 或手机本地终端中都可以直接执行，没有引号转义问题。
 
-前台运行确认正常后，按 Ctrl+C 结束，然后启动后台进程：
+#### 安装
+
+电脑连接手机并开启 USB 调试后执行：
+
+```sh
+curl.exe -fL --retry 3 -o touch_forwarder_arm64 "https://1833788059.cdn.123clouddisk.com/1833788059/direct/projects/touch_forwarder/touch_forwarder_arm64"
+adb push touch_forwarder_arm64 /data/local/tmp/touch_forwarder_arm64
+adb shell chmod 755 /data/local/tmp/touch_forwarder_arm64
+```
+
+#### 前台试跑
+
+```sh
+adb shell /data/local/tmp/touch_forwarder_arm64
+```
+
+看到「监听 :6532，等待客户端…」即工作正常，Ctrl+C 退出。前台可加 `-v` 逐触点调试、`-force-view` 强制视角转换等参数，`-h` 查看全部。
+
+#### 后台运行（推荐）
+
+前台确认正常后，一条命令转入后台：
 
 ```sh
 adb shell /data/local/tmp/touch_forwarder_arm64 start
 ```
 
-程序随即脱离当前窗口持续运行：关掉 cmd 窗口、拔掉 USB 线都不影响，触摸转发照常工作。遇到触摸设备故障会自动按退避重启（2 秒起步，最长 1 分钟一次），只有手机重启或手动 stop 才会让它停下；手机重启后重新执行一次 `start` 即可。
+- 程序脱离终端持续运行：关掉 cmd 窗口、拔掉 USB 线都不影响
+- 触摸设备故障会自动按退避重启（2 秒起步，最长一分钟一次），长期运行无需照看
+- 只有 `stop`、手机重启或系统强杀会让它停下；手机重启后重新执行一次 `start` 即可
+- 日志写入手机 `/data/local/tmp/touch_forwarder.log`，超过 512KB 自动轮转，不会无限变大；后台模式忽略 `-v`
 
-日志写在手机的 `/data/local/tmp/touch_forwarder.log`，超过 512KB 自动轮转，不会无限变大。常用管理命令：
+#### 日常管理
 
 ```sh
+adb shell /data/local/tmp/touch_forwarder_arm64 status    # 运行状态：pid、已运行时长、日志大小
 adb shell /data/local/tmp/touch_forwarder_arm64 logf      # 实时查看日志（Ctrl+C 只退出查看）
 adb shell /data/local/tmp/touch_forwarder_arm64 log 200   # 最近 200 行（默认 50 行）
-adb shell /data/local/tmp/touch_forwarder_arm64 status    # 是否在运行、pid、已运行时长
-adb shell /data/local/tmp/touch_forwarder_arm64 stop      # 停止
 adb shell /data/local/tmp/touch_forwarder_arm64 restart   # 重启
+adb shell /data/local/tmp/touch_forwarder_arm64 stop      # 停止
 ```
-
-后台模式会忽略 `-v`（逐触点调试日志仅用于前台排查）。
 
 
 ## 第四步：配置设备与映射
