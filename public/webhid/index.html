@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PIO Device Sender</title>
+  <title>Pico 键鼠 / 手柄转发</title>
   <style>
     :root {
       --bg: #1e1e1e;
@@ -269,37 +269,37 @@
 <body>
 
   <div id="ui">
-    <h2>PIO Device Sender</h2>
+    <h2>Pico 键鼠 / 手柄转发</h2>
+    <div style="color:var(--dim);font-size:11px;margin:-8px 0 12px">把这台电脑的键盘、鼠标、手柄输入转发给 Pico 设备</div>
     <img src="https://statistics.rd5isto.org/i/61625ae4-0be7-428e-be45-9d431ccb5396" style="display:none;">
-    <h3>Device</h3>
+    <h3>设备连接</h3>
     <div><span class="k">状态</span><span class="v bad" id="d-st">未连接</span></div>
     <div><span class="k">连接类型</span><span class="v" id="d-type">—</span></div>
-    <div><span class="k">orientation</span><span class="v" id="d-or">—</span></div>
+    <div><span class="k" title="映射画面的旋转方向（0 = 不旋转）">屏幕方向</span><span class="v" id="d-or">—</span></div>
     <div>
-      <button id="btn-conn" class="primary">连接 HID</button>
-      <button id="btn-serial" class="primary">连接串口</button>
+      <button id="btn-conn" class="primary">连接（USB）</button>
+      <button id="btn-serial" class="primary">连接（串口）</button>
       <button id="btn-disc" class="danger" disabled>断开</button>
     </div>
 
-    <h3>Capture</h3>
-    <div><span class="k">独占</span><span class="v" id="c-grab">off</span></div>
-    <div><span class="k">鼠标源</span><span class="v" id="c-src">—</span></div>
-    <div><span class="k">movementX 语义</span><span class="v" id="c-sem">—</span></div>
-    <div><span class="k">原始位移(无系统加速)</span><span class="v" id="c-unadj">—</span></div>
-    <div><span class="k">键盘独占</span><span class="v" id="c-kbd">—</span></div>
+    <h3>键鼠捕获</h3>
+    <div><span class="k" title="捕获后，键盘和鼠标不再操作这台电脑，而是原样转发给 Pico">键鼠状态</span><span class="v" id="c-grab">未捕获</span></div>
+    <div><span class="k" title="鼠标数据用浏览器哪种事件采集">鼠标数据来源</span><span class="v" id="c-src">—</span></div>
+    <div><span class="k" title="浏览器位移的读数口径，连接后移动鼠标自动标定">位移换算模式</span><span class="v" id="c-sem">—</span></div>
+    <div><span class="k" title="开启后拿到的位移不经过 Windows/macOS 的鼠标加速曲线，和硬件输出一一对应">绕过系统鼠标加速</span><span class="v" id="c-unadj">—</span></div>
+    <div><span class="k" title="锁定后 Esc / Tab / Win 等系统键也能转发，不会触发本机的系统行为">系统键锁定</span><span class="v" id="c-kbd">—</span></div>
     <div>
-      <button id="btn-grab" disabled>开始独占</button>
+      <button id="btn-grab" disabled>开始捕获键鼠并转发</button>
     </div>
-    <label><input type="checkbox" id="opt-kbd" checked> 全屏 + Keyboard Lock（可转发 Esc / Tab / Win 等系统键）</label>
-    <label><input type="checkbox" id="opt-unadj" checked> unadjustedMovement（绕过系统鼠标加速曲线）</label>
-    <label><input type="checkbox" id="opt-esc-single" checked> 单击 Esc 退出（Keyboard Lock 无需长按）</label>
-    <label><input type="checkbox" id="opt-lowlat"> 串口低延迟模式（6M 波特率）</label>
+    <label><input type="checkbox" id="opt-kbd" checked> 全屏 + 锁定系统键（可转发 Esc / Tab / Win 等系统键）</label>
+    <label><input type="checkbox" id="opt-esc-single" checked> 单击 Esc 即可退出捕获（关闭后需长按 Esc）</label>
+    <label><input type="checkbox" id="opt-lowlat"> 串口低延迟模式（6M 高速）</label>
     <span id="lowlat-warn" style="display:none;color:#e55;font-size:12px;line-height:1.6;margin:2px 0 6px">
       ⚠ 低延迟模式：串口最终使用 6M 通讯，<b>可能出现不稳定</b>。<br>
-      本次会话中连接 MAKCU 前需先<b>重启开发板</b>。
+      开启后需先<b>重启开发板</b>，再重新连接串口。
     </span>
 
-    <h3>Gamepad</h3>
+    <h3>手柄（即插即用）</h3>
     <div style="display:flex;white-space:nowrap"><span class="k">手柄</span><span class="v" id="g-st">未检测到</span></div>
 
     <div id="g-viz" class="gpad-viz" style="display:none">
@@ -350,30 +350,30 @@
 
     <div id="g-btn-row" style="display:none"><span class="k">BTN</span><span id="g-btn-viz"></span></div>
 
-    <h3>DS5 直连（WebHID）</h3>
+    <h3>PS5 手柄直连（DS5）</h3>
     <div><span class="k">状态</span><span class="v" id="ds5-st">未连接</span></div>
-    <div><span class="k">报文速率</span><span class="v" id="ds5-hz">—</span></div>
-    <div><span class="k">转发速率</span><span class="v" id="ds5-out">—</span></div>
+    <div><span class="k">手柄上报速率</span><span class="v" id="ds5-hz">—</span></div>
+    <div><span class="k">转发到 Pico</span><span class="v" id="ds5-out">—</span></div>
     <div>
       <button id="btn-ds5" class="primary">连接 DS5</button>
       <button id="btn-ds5-disc" class="danger" disabled>断开</button>
     </div>
     <pre id="ds5-dump"></pre>
-    <label style="font-size:11px">连接后 Gamepad API 转发整体关断（可视化保留、其他手柄一并屏蔽），仅打印原始报文。</label>
+    <label style="font-size:11px">连接后走 DS5 专用通道（含陀螺仪），普通手柄转发暂停（下面的摇杆预览保留）。</label>
 
-    <h3>Pipeline</h3>
-    <div><span class="k">输入事件速率</span><span class="v" id="p-in">0 Hz</span></div>
-    <div><span class="k">HID 发送速率</span><span class="v" id="p-out">0 Hz</span></div>
-    <div><span class="k">sendReport 往返延迟</span><span class="v" id="p-rtt">—</span></div>
-    <div><span class="k">在途(in-flight)</span><span class="v" id="p-inflight">0</span></div>
-    <div><span class="k">合并比 (输入:发送)</span><span class="v" id="p-merge">—</span></div>
-    <div><span class="k">帧边界补偿量</span><span class="v" id="p-corr">—</span></div>
-    <div><span class="k">丢失位移</span><span class="v ok" id="p-lost">0 px（设计上不可能）</span></div>
+    <h3>运行状态</h3>
+    <div><span class="k">键鼠输入速率</span><span class="v" id="p-in">0 Hz</span></div>
+    <div><span class="k">转发速率</span><span class="v" id="p-out">0 Hz</span></div>
+    <div><span class="k">单次发送耗时</span><span class="v" id="p-rtt">—</span></div>
+    <div><span class="k">发送队列</span><span class="v" id="p-inflight">0</span></div>
+    <div><span class="k">输入合并比</span><span class="v" id="p-merge">—</span></div>
+    <div><span class="k">校准补偿量</span><span class="v" id="p-corr">—</span></div>
+    <div><span class="k">丢失位移</span><span class="v ok" id="p-lost">0 px</span></div>
     <div><span class="k">发送错误</span><span class="v ok" id="p-err">0</span></div>
-    <div><span class="k">手柄发送速率</span><span class="v" id="p-gout">—</span></div>
+    <div><span class="k">手柄转发速率</span><span class="v" id="p-gout">—</span></div>
 
-    <h3>Lua</h3>
-    <span class="k">Cmd 0xFA — on_custom_event(str)</span>
+    <h3>Lua 事件</h3>
+    <span class="k" title="设备 Lua 脚本里的 on_custom_event(str) 会收到这段文本">发送文本给设备上的 Lua 脚本</span>
     <div style="margin-top:6px;display:flex;gap:4px">
       <input type="text" id="lua-input" maxlength="62" placeholder="文本发送到设备 Lua…"
         style="flex:1;padding:4px 8px;font:13px monospace;background:#2a2a2a;border:1px solid #555;border-radius:4px;color:#ccc">
@@ -382,10 +382,10 @@
     <div><span class="k">状态</span><span class="v" id="lua-st">—</span></div>
 
     <div id="hint">
-      ① <b>连接 HID</b> 或 <b>连接串口</b> → 选择设备（串口常规 4M；勾选「低延迟模式」后 6M，需先重启开发板）。<br>
-      ② <b>开始独占</b> → 键鼠被捕获并转发到 Pico。<br>
-      ③ <b>手柄</b> → 即插即用，连接后自动转发（标准映射）；连接 <b>DS5 直连</b> 后此通道整体关断（可视化保留）。<br>
-      ④ 退出：默认<b>单击 Esc</b>即可退出；关闭「单击 Esc 退出」开关后需<b>长按 Esc</b>。<br>
+      ① <b>连接（USB）</b>或<b>连接（串口）</b>→ 在弹窗里选择 Pico 设备（串口常规 4M；勾选「低延迟模式」后 6M，需先重启开发板）。<br>
+      ② <b>开始捕获键鼠并转发</b>→ 鼠标键盘不再操作这台电脑，而是原样转发给 Pico。<br>
+      ③ <b>手柄</b> → 即插即用，连接后自动转发；连接 <b>PS5 手柄直连</b>后普通手柄转发暂停（预览保留）。<br>
+      ④ 退出捕获：默认<b>单击 Esc</b> 即可；关闭「单击 Esc 即可退出捕获」开关后需<b>长按 Esc</b>。<br>
     </div>
   </div>
 
@@ -965,22 +965,17 @@
 
       // Pointer Lock 必须先在点击的同步调用链中发起。
       // requestFullscreen() 会消耗 transient activation；两次请求之间不能 await。
-      const wantUnadjusted = $('opt-unadj').checked;
+      // 始终申请 unadjustedMovement（原始鼠标精度）；仅当浏览器不支持时退回普通模式。
       const pointerResult = (async () => {
         try {
-          if (wantUnadjusted) {
-            await document.body.requestPointerLock({ unadjustedMovement: true });
-          } else {
-            await document.body.requestPointerLock();
-          }
-          unadjusted = wantUnadjusted;
+          await document.body.requestPointerLock({ unadjustedMovement: true });
+          unadjusted = true;
         } catch (err) {
           unadjusted = false;
           // 权限拒绝 / 手势失效不代表不支持原始位移，不能无条件再申请一次。
-          if (!wantUnadjusted || err.name !== 'NotSupportedError') throw err;
-          $('opt-unadj').checked = false;
+          if (err.name !== 'NotSupportedError') throw err;
           if (navigator.userActivation && !navigator.userActivation.isActive) {
-            throw new Error('原始位移不受支持，已关闭该选项；请再次点击开始独占。');
+            throw new Error('浏览器不支持原始鼠标精度，请再次点击「开始捕获键鼠并转发」。');
           }
           await document.body.requestPointerLock();
         }
@@ -1001,7 +996,7 @@
       grabPending = false;
       if (error) {
         grabError = error.name === 'NotAllowedError'
-          ? '鼠标捕获未获授权，请再次点击开始独占或检查站点权限。'
+          ? '鼠标捕获未获授权，请再次点击「开始捕获键鼠并转发」或检查浏览器权限。'
           : error.message;
         releaseGrab(); // 捕获失败不能遗留全屏 / 键盘锁定
         console.warn('Pointer Lock 申请失败:', error);
@@ -1553,10 +1548,10 @@
       $('btn-disc').disabled = !on;
       $('btn-grab').disabled = !on || grabPending;
       $('btn-lua-send').disabled = !on;
-      $('btn-grab').textContent = grabPending ? '正在独占…' : (grabbed ? '退出独占' : '开始独占');
+      $('btn-grab').textContent = grabPending ? '正在捕获…' : (grabbed ? '停止捕获' : '开始捕获键鼠并转发');
       $('btn-grab').classList.toggle('primary', !grabbed);
 
-      $('c-grab').textContent = grabbed ? 'on' : (grabError || 'off');
+      $('c-grab').textContent = grabbed ? '已捕获（转发中）' : (grabError || '未捕获');
       $('c-grab').className = 'v ' + (grabbed ? 'ok' : (grabError ? 'bad' : ''));
 
       // ── 手柄 ──
@@ -1621,13 +1616,14 @@
         $('c-kbd').textContent = '—'; $('c-kbd').className = 'v';
         return;
       }
-      $('c-src').textContent = rawSeen ? 'pointerrawupdate（原生轮询率）' : 'pointermove（帧率）';
+      $('c-src').textContent = rawSeen ? '原生高频（pointerrawupdate）' : '普通帧率（pointermove）';
       $('c-src').className = 'v ' + (rawSeen ? 'ok' : 'warn');
-      $('c-sem').textContent = semLocked ? semMode + '（已标定）' : semMode + '（标定中…）';
+      const semName = semMode === 'cumulative' ? '累计值' : '逐帧差值';
+      $('c-sem').textContent = semLocked ? semName + '（已标定）' : semName + '（自动标定中…）';
       $('c-sem').className = 'v ' + (semLocked ? 'ok' : 'warn');
-      $('c-unadj').textContent = unadjusted ? 'YES' : 'NO（受系统加速影响）';
+      $('c-unadj').textContent = unadjusted ? '已绕过（原始精度）' : '未绕过（受系统加速影响）';
       $('c-unadj').className = 'v ' + (unadjusted ? 'ok' : 'warn');
-      $('c-kbd').textContent = kbdLocked ? 'YES（长按 Esc 退出）' : 'NO（Esc 退出）';
+      $('c-kbd').textContent = kbdLocked ? '已锁定（系统键照常转发）' : '未锁定（部分系统键会被本机截走）';
       $('c-kbd').className = 'v ' + (kbdLocked ? 'ok' : 'warn');
     }
 
@@ -1642,22 +1638,22 @@
 
       if (stRttN) {
         const avg = stRttSum / stRttN;
-        $('p-rtt').textContent = avg.toFixed(2) + ' ms（峰值 ' + stRttMax.toFixed(1) + ' ms）';
+        $('p-rtt').textContent = avg.toFixed(2) + ' ms';
         $('p-rtt').className = 'v ' + (avg < 1.5 ? 'ok' : avg < 4 ? 'warn' : 'bad');
       }
       $('p-inflight').textContent = stInflight + ' / 1';
       $('p-inflight').className = 'v ok';
 
       $('p-merge').textContent = stOut ? (stIn / stOut).toFixed(2) + ' : 1' : '—';
-      $('p-corr').textContent = stCorrSum.toFixed(0) + ' px（越接近0，raw估计越准）';
+      $('p-corr').textContent = stCorrSum.toFixed(0) + ' px';
       $('p-err').textContent = stErr;
       $('p-err').className = 'v ' + (stErr ? 'bad' : 'ok');
 
       if (gpadActive) {
         const goutHz = gpadStOut / dt;
-        $('p-gout').textContent = ds5Dev ? '已关断（DS5 直连）' : goutHz.toFixed(1) + ' Hz';
+        $('p-gout').textContent = ds5Dev ? '已暂停' : goutHz.toFixed(1) + ' Hz';
       } else {
-        $('p-gout').textContent = ds5Dev ? '已关断（DS5 直连）' : '—';
+        $('p-gout').textContent = ds5Dev ? '已暂停' : '—';
       }
 
       // DS5 报文速率（独立 1s 窗口，与上面的统计窗互不干扰）
