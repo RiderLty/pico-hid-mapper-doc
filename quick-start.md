@@ -151,11 +151,11 @@ adb shell chmod 755 /data/local/tmp/touch_forwarder_arm64
 adb shell /data/local/tmp/touch_forwarder_arm64
 ```
 
-看到「监听 :6532，等待客户端…」即工作正常，Ctrl+C 退出，此时插入开发板即可手搓不冲突。
+看到「监听 :6532，等待客户端…」即工作正常，此时插入开发板即可手搓不冲突。
 
 #### 后台运行
 
-测试正常后，使用如下命令进入后台运行，之后PC可断开，保持usb调试开启即可：
+测试正常后，按 `Ctrl+C` 退出，使用如下命令进入后台运行，之后PC可断开，保持usb调试开启即可：
 
 ```sh
 adb shell /data/local/tmp/touch_forwarder_arm64 start
