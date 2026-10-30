@@ -306,7 +306,7 @@ payload 40 字节。将 DualSense（DS5）HID 输入报文的**前 40 字节**�
 
 ## WebHID 控制工具
 
-为了方便调试，提供了一个浏览器端的 **[WebHID 控制工具](/webhid)**（PIO Device Sender），无需安装任何软件即可：
+为了方便调试，提供了一个浏览器端的 **[WebHID 控制工具](/webhid/index.html)**（PIO Device Sender），无需安装任何软件即可：
 
 - **连接设备** — 通过 WebHID API 直接选择并连接 Pico HID 设备
 - **命令构造** — 可视化构造上述所有 CMD（触屏/鼠标/键盘/core_input/Lua 事件/手柄报文），一键发送

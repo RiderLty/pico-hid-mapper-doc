@@ -68,7 +68,8 @@ export default defineConfig({
     nav: [
       { text: '快速开始', link: '/quick-start' },
       { text: '文档', link: '/api/' },
-      { text: 'WebHID 工具', link: '/webhid' },
+      // public/ 下的独立控制页（非 VitePress 页面），整页跳转由主题层处理
+      { text: 'WebHID 工具', link: '/webhid/index.html' },
     ],
 
     sidebar: {

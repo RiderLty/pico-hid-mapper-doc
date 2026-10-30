@@ -185,7 +185,7 @@ adb shell /data/local/tmp/touch_forwarder_arm64 stop      # 停止
 
 | 使用方式 | PIO 工作模式 | 说明 |
 |------|------|------|
-| 上位机控制（微雪板） | **Device** | 电脑通过 [WebHID 工具](/webhid)（Chrome / Edge）发送键鼠报文 |
+| 上位机控制（微雪板） | **Device** | 电脑通过 [WebHID 工具](/webhid/index.html)（Chrome / Edge）发送键鼠报文 |
 | 直连键鼠（微雪板） | **Host**（默认） | 经 CH334 拓展坞连接键鼠 |
 | 定制硬件 | **Host** | 上位机通过板载 USB 转串口（MAKCU 协议）控制 |
 
