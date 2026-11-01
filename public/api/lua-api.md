@@ -434,8 +434,8 @@ end
 dkb_key(0xE0, true); dkb_key(0x06, true); dkb_key(0x06, false); dkb_key(0xE0, false)
 ```
 
-> 想要"按住 30ms 再松"这种时序，用「[异步动作序列](#异步动作序列-协程-coroutine)」里的协程 `sleep`：
-> `spawn(function() dkb_key(0x04, true); sleep(30000); dkb_key(0x04, false) end)`。
+> 想要"按住 30ms 再松"这种时序，用「[异步动作序列](#异步动作序列-协程-coroutine)」里的协程：
+> `spawn(function() dkb_key(0x04, true); sleep_ms(30); dkb_key(0x04, false) end)`。
 
 ---
 
@@ -1095,68 +1095,49 @@ end
 
 ### 异步动作序列 (协程 coroutine)
 
-引擎**没有阻塞式 sleep**。想写 "按下 → 等 50ms → 滑动 → 等 30ms → 抬起" 这种**带时序的顺序逻辑**，用协程：
+引擎**没有阻塞式 sleep**。想写 "按下 → 等 50ms → 滑动 → 等 30ms → 抬起" 这种**带时序的顺序逻辑**，用**固件内建**的 `spawn` + `sleep`（协程）：调度器已内建、全模块共享，**不用**再自己维护 tasks 表和 tick 里的排水循环。
 例如vmouse模式下，右键将物品拖动到丢弃区域
 ```lua
 enable_listen_mouse_btn(0x01)                     -- 右键
 local scale_x, scale_y = 1, 1
-local tasks = {}                                -- 协程调度队列
 
 function init()
     scale_x, scale_y = get_scale()
 end
 
--- 在协程内调用: 暂停当前序列 wait_us 微秒后继续
-local function sleep(wait_us)
-    coroutine.yield(wait_us)
-end
-
--- 启动一个异步序列: 把函数包成协程入队
-local function spawn(fn)
-    tasks[#tasks + 1] = {
-        co = coroutine.create(fn),
-        remain = 0                              -- 0 → 下个 tick 立刻跑
-    }
-end
-
 function on_mouse_btn(button, down)
     if button == 0x01 and down then
         local mx, my = get_vmouse()             -- 快照按下瞬间的光标位置
-        spawn(function()
+        spawn(function()                        -- 内建全局：任何回调/init/顶层都能调
             local id = touch_down(mx * scale_x, my * scale_y)
             if id == 0xFF then return end       -- 没有空闲触点, 放弃
-            sleep(50000)                        -- 停 50ms
+            sleep_ms(50)                        -- 停 50ms
             touch_move(id, 0x3FFFFFFF, 0x3FFFFFFF)  -- 滑到屏幕中心
-            sleep(30000)                        -- 停 30ms
+            sleep_ms(30)                        -- 停 30ms
             touch_up(id)
         end)
     end
     return false
 end
-
-function tick(dt_us)
-    -- 倒序遍历: 删除已完成任务不影响未遍历的索引
-    for i = #tasks, 1, -1 do
-        local t = tasks[i]
-        t.remain = t.remain - dt_us
-        if t.remain <= 0 then
-            local ok, wait_us = coroutine.resume(t.co)
-            if not ok or coroutine.status(t.co) == "dead" then
-                table.remove(tasks, i)          -- 报错或正常结束 → 移除
-            else
-                t.remain = wait_us or 0         -- yield 让出 → 记下还要等多久
-            end
-        end
-    end
-end
 ```
 
+**内建 API**（固件自动注入，无需定义）:
+
+| 函数 | 说明 |
+|---|---|
+| `spawn(fn)` | 把函数包成协程入队，下个 tick 开始跑；报错会记日志 `[lua_task] 模块名: ...` 并移除，不影响其它任务 |
+| `sleep_ms(ms)` | **只能在 spawn 的协程里调用**：暂停 ms 毫秒后继续 |
+| `sleep_us(us)` | 同上，单位微秒 |
+| `sleep` | = `sleep_ms` 的别名（毫秒语义） |
+
 **模式要点**:
-- `spawn(fn)` 把任意 "动作序列函数" 变成异步任务；函数里用 `sleep(us)` 表达等待。
-- 用 `dt_us` 倒计时 (`remain -= dt`，到 0 就 resume)。
-- 协程里每一步仍要**轻量** — 在 `tick` 里被 resume，别在一步里做重循环。等待外部条件时也一样：`while not cond() do sleep(10) end`（每 10ms 醒来查一次），**不要写无 `sleep` 的忙等**——单次进入 VM 的 10ms 墙钟预算会被它烧穿。
+- `spawn(fn)` 把任意 "动作序列函数" 变成异步任务；函数里用 `sleep_ms/sleep_us` 表达等待。带时序的顺序逻辑（连点、按住 N ms、逐字打字…）**优先用异步**，不要写成 tick 状态机。
+- `sleep*` 在回调/tick 里直接调用会报错（"sleep 只能在 spawn 启动的协程里调用"）——回调必须立刻返回。
+- **唤醒粒度 = tick 周期**：实际等待向上取整到下一次调度，`sleep_us(1)` 不会真在 1µs 后继续。常规时序用 `sleep_ms` 就够。
+- 协程里每一步仍要**轻量** — 别在一步里做重循环。等待外部条件时也一样：`while not cond() do sleep_ms(10) end`（每 10ms 醒来查一次），**不要写无 `sleep` 的忙等**——单次进入 VM 的 10ms 墙钟预算会被它烧穿。
 - 协程可以**长期运行**（宏循环这类），每片耗时极短即可；预算按"单次 tick 内所有分片累计"计，正常分片远碰不到。
-- `coroutine` 标准库可用 (`create/resume/yield/status`)。
+- 任务数上限 32。
+- `coroutine` 标准库可用 (`create/resume/yield/status`)。**旧脚本自带 spawn/sleep 定义的（local 或全局）会遮蔽内建，行为不变**——旧 µs 语义的自定义 `sleep` 继续按微秒等。
 
 ### 键鼠直通 (dkb_ / dmo_)
 
@@ -1191,31 +1172,7 @@ local TEXT_KEYS = {                       -- 演示用：字母/数字/空格/�
     ["0"] = 0x27, ["\r"] = 0x28, [" "] = 0x2C,
 }
 
--- ── 协程调度器 (写法与要点见上一节「异步动作序列」) ──
-local tasks = {}
-
-local function sleep(wait_us)
-    coroutine.yield(wait_us)
-end
-
-local function spawn(fn)
-    tasks[#tasks + 1] = { co = coroutine.create(fn), remain = 0 }
-end
-
-function tick(dt_us)
-    for i = #tasks, 1, -1 do
-        local t = tasks[i]
-        t.remain = t.remain - dt_us
-        if t.remain <= 0 then
-            local ok, wait_us = coroutine.resume(t.co)
-            if not ok or coroutine.status(t.co) == "dead" then
-                table.remove(tasks, i)
-            else
-                t.remain = wait_us or 0
-            end
-        end
-    end
-end
+-- ── 协程调度（spawn/sleep_ms）为固件内建，见上一节「异步动作序列」──
 
 -- ── 逐字打字：按下 → 停 15ms → 抬起 → 停 15ms ──
 local function type_text(s)
@@ -1224,9 +1181,9 @@ local function type_text(s)
             local k = TEXT_KEYS[s:sub(i, i)]
             if k then
                 dkb_key(k, true)
-                sleep(15000)
+                sleep_ms(15)
                 dkb_key(k, false)
-                sleep(15000)
+                sleep_ms(15)
             end
         end
         dkb_release_all()                 -- 兜底: 中途出错也不会在上位机卡键
@@ -1237,9 +1194,9 @@ end
 local function click_at_offset(dx, dy)
     spawn(function()
         dmo_move(dx, dy)
-        sleep(20000)                      -- 等光标到位再点
+        sleep_ms(20)                      -- 等光标到位再点
         dmo_btn(0x00, true)                  -- 0 = 左键
-        sleep(30000)                      -- 按住 30ms, 太短会被上位机忽略
+        sleep_ms(30)                      -- 按住 30ms, 太短会被上位机忽略
         dmo_btn(0x00, false)
     end)
 end
