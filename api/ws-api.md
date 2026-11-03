@@ -72,8 +72,8 @@ end
 客户端只需监听 WebSocket 的 `onmessage` 事件即可收到。
 
 > 帧格式为**二进制帧**：首字节是命令字。`0x01` = 日志文本（正文 UTF-8，可能含嵌入换行）；
-> `0x02` = 陀螺仪遥测（见下一节）。**客户端应先看首字节再决定怎么解析**——
-> 只当文本处理的旧客户端遇到 `0x02` 应直接忽略。
+> `0x02` = 陀螺仪遥测（见下一节）；`0x03` = 光标位置帧（见下下节）。**客户端应先看首字节再决定怎么解析**——
+> 只当文本处理的旧客户端遇到 `0x02`/`0x03` 应直接忽略。
 
 ### 示例
 
@@ -136,3 +136,50 @@ websocat ws://192.168.73.1/ws
 > 手动校准跑完的时候：那时 `cal_state` 会停在 3 / 4 / 5，只要监视流还在推，客户端下一帧
 > 就读得到；面板收起/失焦/关弹窗时流才停。因此客户端应把"收到状态 3/4/5"当作本次校准结束。
 > 若在没有监视流时也要查状态，可用 `GET /gyro/cal/state`（同布局，不含首字节 CMD）。
+
+---
+
+## 光标位置帧 (0x03) ← 设备
+
+「参数配置 → 光标显示方式」选**融合器光标（6）**时，设备把虚拟光标位置经 WebSocket 推送
+（面板 `#cursor` 绿幕页即为此设计：在 OBS 添加浏览器源填 `http://<设备IP>/#cursor`，
+加「色键」滤镜抠掉绿色，即可把指针叠加到直播画面）。
+
+- **触发**：脏驱动——位置或状态（显示/按下）每次变化推一帧，无固定频率（与 vPointer app
+  的 TCP 推流同一条链路，最快约 1 kHz）。其它光标方式下不推送。
+- **坐标系**：`0 .. 0x7FFFFFFE` 归一化，**已含 contain 缩放（外接显示器黑边）、不含旋转**
+  ——左上角为原点，与 vPointer app 的光标同一口径。前端换算：
+  `px = x / 0x7FFFFFFE * 窗口宽`、`py = y / 0x7FFFFFFE * 窗口高`，页面任意尺寸自适应。
+- 帧为二进制，共 **10 字节**（小端）：
+
+| 偏移 | 字段 | 类型 | 说明 |
+| --- | --- | --- | --- |
+| 0 | CMD | u8 | 固定 `0x03` |
+| 1–4 | x | i32 | 0..0x7FFFFFFE（已含 contain 缩放，未旋转） |
+| 5–8 | y | i32 | 同上 |
+| 9 | state | u8 | bit0 = 光标显示中｜bit1 = 按下中（**点击本身仍由触屏接口产生真实触摸**，与 vPointer app 模式相同；此位只供前端做按下变色等视觉反馈） |
+
+### 示例
+
+**浏览器**
+
+```js
+const ws = new WebSocket("ws://192.168.73.1/ws");
+ws.binaryType = "arraybuffer";
+ws.onmessage = (e) => {
+    const b = new Uint8Array(e.data);
+    if (b[0] !== 0x03) return;                  // 0x01 日志 / 0x02 陀螺，忽略
+    const v = new DataView(b.buffer);
+    const x = v.getInt32(1, true), y = v.getInt32(5, true);
+    const show = !!(b[9] & 1), down = !!(b[9] & 2);
+    cursor.style.transform =
+        `translate(${x / 0x7FFFFFFE * innerWidth}px, ${y / 0x7FFFFFFE * innerHeight}px)`;
+    cursor.style.display = show ? "block" : "none";
+};
+```
+
+**命令行观察原始帧**
+
+```
+websocat -b ws://192.168.73.1/ws | xxd
+```
