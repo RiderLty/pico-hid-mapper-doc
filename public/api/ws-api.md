@@ -147,9 +147,10 @@ websocat ws://192.168.73.1/ws
 
 - **触发**：脏驱动——位置或状态（显示/按下）每次变化推一帧，无固定频率（与 vPointer app
   的 TCP 推流同一条链路，最快约 1 kHz）。其它光标方式下不推送。
-- **坐标系**：`0 .. 0x7FFFFFFE` 归一化，**已含 contain 缩放（外接显示器黑边）、不含旋转**
-  ——左上角为原点，与 vPointer app 的光标同一口径。前端换算：
-  `px = x / 0x7FFFFFFE * 窗口宽`、`py = y / 0x7FFFFFFE * 窗口高`，页面任意尺寸自适应。
+- **坐标系**：vmouse **原始像素坐标**，`0 .. 配置屏幕宽高`（左上角原点，未经 contain 缩放、
+  未旋转）。页面打开时经 `POST /slot/status` + `POST /slot/read/<当前槽>` 读取当前配置的
+  屏幕分辨率（当前槽为空时固件跑编译期默认配置，用默认模板尺寸），自行把该分辨率 contain
+  进页面后换算：`px = 区域x + x / 配置宽 * 区域宽`。
 - 帧为二进制，共 **10 字节**（小端）：
 
 | 偏移 | 字段 | 类型 | 说明 |
@@ -172,8 +173,9 @@ ws.onmessage = (e) => {
     const v = new DataView(b.buffer);
     const x = v.getInt32(1, true), y = v.getInt32(5, true);
     const show = !!(b[9] & 1), down = !!(b[9] & 2);
-    cursor.style.transform =
-        `translate(${x / 0x7FFFFFFE * innerWidth}px, ${y / 0x7FFFFFFE * innerHeight}px)`;
+    // cfgW/cfgH = 当前配置的屏幕分辨率（打开时经 slot API 获取）
+    cursor.style.left = (rectX + x / cfgW * rectW) + "px";
+    cursor.style.top = (rectY + y / cfgH * rectH) + "px";
     cursor.style.display = show ? "block" : "none";
 };
 ```
