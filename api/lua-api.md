@@ -608,7 +608,7 @@ led_off()
 | 函数 | 说明 |
 |------|------|
 | `h = lcd_acquire(n)` | 申请 n 行**连续**行块（自顶向下 first-fit），返回句柄；无空位返回 `nil, "no space"`。 |
-| `lcd_write(h, off, text [, font] [, color])` | 写本块内第 off 行（off 从 0 起）。`font`：0=12px（默认）1=16px；`color`：`0xRRGGBB`（默认白）。 |
+| `lcd_write(h, off, text [, font] [, color])` | 写本块内第 off 行（off 从 0 起）。`font`：1=16px（默认）0=12px；`color`：`0xRRGGBB`（默认白）。 |
 | `lcd_release(h)` | 释放行块并清空，句柄失效（重复释放无害）。 |
 | `lcd_status()` | 自省表：`rows` 数组每项 `"free"/"notify"/"lease:<id>"`，`free` 为空闲行数。 |
 
