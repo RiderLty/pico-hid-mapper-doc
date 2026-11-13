@@ -6,7 +6,16 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 /** 需要在 public/api/ 中提供下载的 API 参考 .md 文件 */
-const API_MD_DOWNLOADS = ['hid-api.md', 'lua-api.md', 'ws-api.md', 'hid-code.md', 'serial-api.md']
+const API_MD_DOWNLOADS = [
+  'index.md',
+  'principles.md',
+  'mapper-config.md',
+  'hid-api.md',
+  'ws-api.md',
+  'lua-api.md',
+  'serial-api.md',
+  'hid-code.md',
+]
 
 const ROOT = resolve(__dirname, '..')
 
