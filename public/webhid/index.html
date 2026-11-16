@@ -277,7 +277,8 @@
     <div><span class="k">连接类型</span><span class="v" id="d-type">—</span></div>
     <div><span class="k" title="映射画面的旋转方向（0 = 不旋转）">屏幕方向</span><span class="v" id="d-or">—</span></div>
     <div>
-      <button id="btn-conn" class="primary">连接（USB）</button>
+      <button id="btn-usb" class="primary">连接（WinUSB）</button>
+      <button id="btn-conn" class="primary">连接（HID）</button>
       <button id="btn-serial" class="primary">连接（串口）</button>
       <button id="btn-disc" class="danger" disabled>断开</button>
     </div>
@@ -382,7 +383,7 @@
     <div><span class="k">状态</span><span class="v" id="lua-st">—</span></div>
 
     <div id="hint">
-      ① <b>连接（USB）</b>或<b>连接（串口）</b>→ 在弹窗里选择 Pico 设备（串口常规 4M；勾选「低延迟模式」后 6M，需先重启开发板）。<br>
+      ① 优先 <b>连接（WinUSB）</b>（vendor bulk；Windows 8.1+ 由 MS OS 2.0 自动绑定，Linux 需允许 WebUSB 访问该 VID）；也可用 <b>连接（HID）</b> 或 <b>连接（串口）</b>。串口常规 4M，勾选「低延迟模式」后 6M，需先重启开发板。<br>
       ② <b>开始捕获键鼠并转发</b>→ 鼠标键盘不再操作这台电脑，而是原样转发给 Pico。<br>
       ③ <b>手柄</b> → 即插即用，连接后自动转发；连接 <b>PS5 手柄直连</b>后普通手柄转发暂停（预览保留）。<br>
       ④ 退出捕获：默认<b>单击 Esc</b> 即可；关闭「单击 Esc 即可退出捕获」开关后需<b>长按 Esc</b>。<br>
@@ -395,7 +396,14 @@
     // ===========================================================================
     // 协议常量 —— 对齐 pio_device_protocol.py
     // ===========================================================================
-    const VID = 0x2E8A, PID = 0xC9D0;
+    const VID = 0x2E8A;
+    const PID = 0xC9D1;          // 新复合固件：HID 接口 + vendor bulk（WinUSB）
+    const PID_LEGACY = 0xC9D0;   // 旧 HID-only 固件，继续兼容
+    // WebHID / WebUSB 共用：两种 PID 都列出来，新旧固件都能连接。
+    const DEVICE_FILTERS = [
+      { vendorId: VID, productId: PID },
+      { vendorId: VID, productId: PID_LEGACY },
+    ];
     const H0 = 0x55, H1 = 0xAA, REPORT_SIZE = 64, REPORT_ID = 0;
 
     const CMD_CORE_INPUT = 0xFC;
@@ -502,11 +510,7 @@
       luaBuf[3] = CMD_LUA;
       luaBuf.set(payload, 4);
       try {
-        if (device.isSerial) {
-          await sendSerial(luaBuf);
-        } else {
-          await device.sendReport(REPORT_ID, luaBuf);
-        }
+        await sendAny(luaBuf);
         $('lua-input').value = '';
         $('lua-st').textContent = '已发送';
         $('lua-st').className = 'v ok';
@@ -593,12 +597,8 @@
           const t = performance.now();
           stInflight = 1;
 
-          // 根据连接类型发送
-          if (device.isSerial) {
-            await sendSerial(txBuf);
-          } else {
-            await device.sendReport(REPORT_ID, txBuf);
-          }
+          // 根据连接类型发送（HID / 串口 / WinUSB）
+          await sendAny(txBuf);
           stInflight = 0;
 
           const rtt = performance.now() - t;
@@ -898,10 +898,7 @@
         // （可视化照常刷新，只是不向设备转发）
         if (device && device.opened && stateChanged && !ds5Dev) {
           buildGamepadReport(ls_x, ls_y, rs_x, rs_y, lt, rt, btns);
-          const sendPromise = device.isSerial
-            ? sendSerial(gpadBuf)
-            : device.sendReport(REPORT_ID, gpadBuf);
-          sendPromise.then(() => { gpadStOut++; }, () => { gpadStErr++; });
+          sendAny(gpadBuf).then(() => { gpadStOut++; }, () => { gpadStErr++; });
         }
       }
 
@@ -1266,6 +1263,7 @@
       dev.oninputreport = (e) => parseInput(e.data);
       device = dev;
       device.isSerial = false;
+      device.isUsb = false;
       clearPipeline();
       gpadStartOnDevice();
       renderStatic();
@@ -1283,6 +1281,10 @@
       if (device) {
         if (device.isSerial) {
           await detachSerial();
+          return;
+        }
+        if (device.isUsb) {
+          await detachUsb();
           return;
         }
         device.oninputreport = null;
@@ -1305,7 +1307,7 @@
     navigator.hid && navigator.hid.addEventListener('connect', async (e) => {
       if (device) return;
       const dev = e.device;
-      if (dev.vendorId !== VID || dev.productId !== PID) return;
+      if (dev.vendorId !== VID || (dev.productId !== PID && dev.productId !== PID_LEGACY)) return;
       try {
         await attachDevice(dev);
         $('d-st').textContent = '已连接（自动重连）';
@@ -1317,9 +1319,10 @@
     $('btn-conn').onclick = async () => {
       try {
         const known = await navigator.hid.getDevices();
-        let dev = known.find(d => d.vendorId === VID && d.productId === PID);
+        let dev = known.find(d => d.vendorId === VID &&
+          (d.productId === PID || d.productId === PID_LEGACY));
         if (!dev) {
-          [dev] = await navigator.hid.requestDevice({ filters: [{ vendorId: VID, productId: PID }] });
+          [dev] = await navigator.hid.requestDevice({ filters: DEVICE_FILTERS });
         }
         if (!dev) return;
         await attachDevice(dev);
@@ -1327,6 +1330,153 @@
         $('d-st').className = 'v ok';
       } catch (err) {
         console.error('连接失败:', err);
+        $('d-st').textContent = 'ERR: ' + err.message;
+        $('d-st').className = 'v bad';
+      }
+    };
+
+    // ===========================================================================
+    // WinUSB / WebUSB（vendor bulk，接口 1：EP 0x02 OUT / EP 0x83 IN）
+    //
+    // 固件同时暴露 HID（接口 0）与 vendor bulk（接口 1），两条通道共用
+    // 同一套 55 AA 帧。Chrome/Edge 的 WebUSB 要求设备在 BOS 里带 WebUSB
+    // 平台能力（固件已加）；Windows 另由 MS OS 2.0 Compatible ID 自动绑定
+    // WinUSB，无需 INF / Zadig。
+    // ===========================================================================
+    let usbDev = null;
+    let usbIfNum = -1;
+    let usbEpOut = 0;
+    let usbEpIn = 0;
+    let usbReadToken = 0;
+
+    // 在设备配置里找 class 0xFF 且同时带 bulk OUT/IN 的接口。
+    // claimInterface 失败通常是没有 WinUSB 驱动（Win8.1+ 应自动绑定）
+    // 或 Linux 没有 usbfs 权限。
+    function findVendorInterface(dev) {
+      const cfg = dev.configuration;
+      if (!cfg) return null;
+      for (const itf of cfg.interfaces) {
+        const alt = itf.alternate;
+        if (!alt || alt.interfaceClass !== 0xFF) continue;
+        const out = alt.endpoints.find(e =>
+          e.type === 'bulk' && e.direction === 'out');
+        const inp = alt.endpoints.find(e =>
+          e.type === 'bulk' && e.direction === 'in');
+        if (out && inp) return { itf, alt, out, inp };
+      }
+      return null;
+    }
+
+    async function attachUsb(dev) {
+      if (!dev.opened) await dev.open();
+      if (!dev.configuration) await dev.selectConfiguration(1);
+      const found = findVendorInterface(dev);
+      if (!found) {
+        throw new Error('未找到 vendor bulk 接口（固件是否为带 WinUSB 的新版？）');
+      }
+      await dev.claimInterface(found.itf.interfaceNumber);
+      usbDev = dev;
+      usbIfNum = found.itf.interfaceNumber;
+      usbEpOut = found.out.endpointNumber;
+      usbEpIn = found.inp.endpointNumber;
+      usbReadToken++;
+      const token = usbReadToken;
+      device = {
+        opened: true,
+        isSerial: false,
+        isUsb: true,
+        close: () => detachUsb(),
+      };
+      clearPipeline();
+      gpadStartOnDevice();
+      renderStatic();
+      usbReadLoop(dev, token);
+    }
+
+    // 持续读 bulk IN（设备事件帧）。拔出/close() 会让在途 transferIn 抛错，
+    // 属于正常退出，不重复清理。
+    async function usbReadLoop(dev, token) {
+      while (usbDev === dev && usbReadToken === token) {
+        try {
+          const res = await dev.transferIn(usbEpIn, REPORT_SIZE);
+          if (usbDev !== dev || usbReadToken !== token) break;
+          if (res.status === 'ok' && res.data) {
+            parseInput(res.data);
+          } else if (res.status === 'stall') {
+            await dev.clearHalt('in', usbEpIn).catch(() => { });
+          }
+        } catch (err) {
+          if (usbDev === dev && usbReadToken === token) {
+            console.error('WinUSB 读取错误:', err);
+            detachUsb();
+          }
+          break;
+        }
+      }
+    }
+
+    async function sendUsb(buf) {
+      if (!usbDev) throw new Error('WinUSB 未连接');
+      // 固定发 64B：与 HID 报告同长，固件按 LEN 截取，尾部零填充无影响。
+      // 复制一份，避免在途 transferOut 与调用方复用 txBuf 冲突。
+      const out = new Uint8Array(REPORT_SIZE);
+      out.set(buf.subarray(0, REPORT_SIZE));
+      const res = await usbDev.transferOut(usbEpOut, out);
+      if (res.status !== 'ok') throw new Error('WinUSB transferOut: ' + res.status);
+    }
+
+    // 统一发送入口：HID / 串口 / WinUSB。
+    async function sendAny(buf) {
+      if (!device || !device.opened) return;
+      if (device.isUsb) return sendUsb(buf);
+      if (device.isSerial) return sendSerial(buf);
+      return device.sendReport(REPORT_ID, buf);
+    }
+
+    async function detachUsb() {
+      const dev = usbDev;
+      usbReadToken++;
+      usbDev = null;
+      if (device && device.isUsb) device = null;
+      if (dev) {
+        try { await dev.releaseInterface(usbIfNum); } catch (_) { }
+        try { await dev.close(); } catch (_) { }
+      }
+      usbIfNum = -1;
+      usbEpOut = 0;
+      usbEpIn = 0;
+      clearPipeline();
+      renderStatic();
+    }
+
+    navigator.usb && navigator.usb.addEventListener('disconnect', (e) => {
+      if (e.device === usbDev) {
+        detachUsb();
+        $('d-st').textContent = '设备已拔出';
+        $('d-st').className = 'v bad';
+      }
+    });
+
+    $('btn-usb').onclick = async () => {
+      if (!navigator.usb) {
+        $('d-st').textContent = 'WebUSB API 不可用';
+        $('d-st').className = 'v bad';
+        return;
+      }
+      try {
+        const known = await navigator.usb.getDevices();
+        let dev = known.find(d => d.vendorId === VID &&
+          (d.productId === PID || d.productId === PID_LEGACY));
+        if (!dev) {
+          dev = await navigator.usb.requestDevice({ filters: DEVICE_FILTERS });
+        }
+        if (!dev) return;
+        await attachUsb(dev);
+        $('d-st').textContent = '已连接';
+        $('d-st').className = 'v ok';
+      } catch (err) {
+        if (err.name === 'NotFoundError') return;
+        console.error('WinUSB 连接失败:', err);
         $('d-st').textContent = 'ERR: ' + err.message;
         $('d-st').className = 'v bad';
       }
@@ -1409,10 +1559,7 @@
     function sendDs5Frame(body) {
       if (!device || !device.opened) return;
       buildDs5Frame(body);
-      const sendPromise = device.isSerial
-        ? sendSerial(ds5TxBuf)
-        : device.sendReport(REPORT_ID, ds5TxBuf);
-      sendPromise.then(() => { ds5StOut++; }, () => { ds5StErr++; });
+      sendAny(ds5TxBuf).then(() => { ds5StOut++; }, () => { ds5StErr++; });
     }
 
     function ds5FmtDump(reportId, dv) {
@@ -1541,10 +1688,16 @@
       const on = !!(device && device.opened);
       $('d-st').textContent = on ? '已连接' : '未连接';
       $('d-st').className = 'v ' + (on ? 'ok' : 'bad');
-      $('d-type').textContent = on ? (device.isSerial ? '串口 (' + (serialWorkBaud() / 1000000) + 'M' + ($('opt-lowlat').checked ? ' 低延迟' : '') + ')' : 'HID') : '—';
+      $('d-type').textContent = on
+        ? (device.isSerial
+          ? '串口 (' + (serialWorkBaud() / 1000000) + 'M' +
+            ($('opt-lowlat').checked ? ' 低延迟' : '') + ')'
+          : (device.isUsb ? 'WinUSB (Bulk)' : 'HID'))
+        : '—';
       $('d-or').textContent = on ? orient : '—';
-      $('btn-conn').disabled = on;
-      $('btn-serial').disabled = on;
+      $('btn-conn').disabled = on || !navigator.hid;
+      $('btn-usb').disabled = on || !navigator.usb;
+      $('btn-serial').disabled = on || !navigator.serial;
       $('btn-disc').disabled = !on;
       $('btn-grab').disabled = !on || grabPending;
       $('btn-lua-send').disabled = !on;
@@ -1673,16 +1826,13 @@
       if (dt > 1) resetStats();
     }, 250);
 
-    if (!navigator.hid) {
-      $('d-st').textContent = 'WebHID 不可用';
-      $('btn-conn').disabled = true;
-      $('hint').innerHTML = '<b>WebHID 不可用。</b>需要 Chrome/Edge 89+ 且运行在 secure context（HTTPS 或 localhost）。';
-    } else {
-      renderStatic();
-    }
-
-    if (!navigator.serial) {
-      $('btn-serial').disabled = true;
+    renderStatic();
+    if (!navigator.hid && !navigator.usb) {
+      $('d-st').textContent = 'WebHID/WebUSB 不可用';
+      $('d-st').className = 'v bad';
+      $('hint').innerHTML = '<b>WebHID/WebUSB 不可用。</b>需要 Chrome/Edge 89+ 且运行在 secure context（HTTPS 或 localhost）。';
+    } else if (!navigator.hid) {
+      $('hint').innerHTML = '<b>WebHID 不可用</b>（需要 Chrome/Edge 89+ 与 secure context）；仍可用 <b>连接（WinUSB）</b>。';
     }
   </script>
 </body>

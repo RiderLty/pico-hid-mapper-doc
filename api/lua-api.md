@@ -602,7 +602,7 @@ led_off()
 
 ## 状态屏 (lcd / 多模块行分配)
 
-> 需要外接 ST7789 240×320 状态屏的专有硬件与对应固件；普通/蓝牙固件不提供这些函数，调用会报 attempt to call nil。
+> 所有固件都注册这些函数，但只有外接 ST7789 240×320 状态屏的硬件上才真正显示。无屏板型（普通 / 蓝牙固件）上 `lcd_status().available` 为 `false`：`lcd_acquire` 返回 `nil, "no lcd"`，`lcd_write` / `lcd_release` / `lcd_notify` 返回 `false`，`lcd_line` 静默无效。
 
 设备外接的 ST7789 状态屏（240×320）底部是脚本自定义区：**5 行 × 行高 24**。多个 Lua 模块共享这 5 行，通过**租约**申请与释放，互不冲突：
 
@@ -610,10 +610,10 @@ led_off()
 
 | 函数 | 说明 |
 |------|------|
-| `h = lcd_acquire(n)` | 申请 n 行**连续**行块（自顶向下 first-fit），返回句柄；无空位返回 `nil, "no space"`。 |
-| `lcd_write(h, off, text [, font] [, color])` | 写本块内第 off 行（off 从 0 起）。`font`：1=16px（默认）0=12px；`color`：`0xRRGGBB`（默认白）。 |
+| `h = lcd_acquire(n)` | 申请 n 行**连续**行块（自顶向下 first-fit），返回句柄；无空位返回 `nil, "no space"`，无屏板型返回 `nil, "no lcd"`。 |
+| `lcd_write(h, off, text [, font] [, color])` | 写本块内第 off 行（off 从 0 起）。`font`：1=16px（默认）0=12px；`color`：`0xRRGGBB`（默认白）。句柄无效或无屏时返回 `false`。 |
 | `lcd_release(h)` | 释放行块并清空，句柄失效（重复释放无害）。 |
-| `lcd_status()` | 自省表：`rows` 数组每项 `"free"/"notify"/"lease:<id>"`，`free` 为空闲行数。 |
+| `lcd_status()` | 自省表：`available`（本机是否有状态屏）、`rows` 数组每项 `"free"/"notify"/"lease:<id>"`、`free` 为空闲行数（无屏时为 0）。 |
 
 ```lua
 local h = lcd_acquire(2)                 -- 申请 2 行
@@ -649,7 +649,7 @@ lcd_line(row, text [, font] [, color])   -- row 1..5
 - 超长自动截断；写入不是立即绘制，屏由刷新循环节流更新（约 0.1~0.3 秒），建议状态变化时才写。
 - 文本为 UTF-8；子集外的生僻字显示为占位符（拷/锟/斤）。
 - 脚本热重载/更新时全部租约与通知自动清空，`init()` 重新申请。
-- 仅状态屏固件（`--board lcd` / `lcd-dev`）提供这些函数；普通/蓝牙固件调用会报 attempt to call nil。
+- **跨板兼容**：这些函数在所有固件上都存在，同一份脚本可以直接跑在无屏板型上。要在状态屏显示时先探测 `if lcd_status().available then ... end`；无屏时 lcd_* 不会抛错，只是返回失败或静默无效（`lcd_acquire` 的 `nil` 仍要按常规判空），不需要 `pcall`。
 
 ## 坐标系与换算
 
