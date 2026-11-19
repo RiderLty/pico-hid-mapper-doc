@@ -45,6 +45,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: 'pico-hid-mapper',
   outDir: 'docs/.vitepress/dist',
+  srcExclude: ['drafts/**'],
 
   vite: {
     server: {
@@ -89,10 +90,10 @@ export default defineConfig({
             { text: '总览', link: '/api/' },
             { text: '原理说明', link: '/api/principles' },
             { text: '映射配置说明', link: '/api/mapper-config' },
-            { text: 'HIDAPI', link: '/api/hid-api' },
+            { text: '55 AA 控制帧', link: '/api/hid-api' },
             { text: 'WebSocket API', link: '/api/ws-api' },
             { text: 'Lua 脚本 API', link: '/api/lua-api' },
-            { text: '串口协议（MAKCU + HID）', link: '/api/serial-api' },
+            { text: '串口协议（MAKCU）', link: '/api/serial-api' },
             { text: 'HID 键码参考', link: '/api/hid-code' },
           ],
         },

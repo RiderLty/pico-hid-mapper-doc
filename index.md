@@ -4,7 +4,7 @@ layout: home
 hero:
   name: pico-hid-mapper
   text: USB HID 映射器
-  tagline: 基于微雪 RP2350-USB-C 将键鼠输入映射为触屏操作
+  tagline: 基于 RP2350 定制开发板，将键鼠输入映射为触屏操作
   image:
     src: /icon.png
     alt: pico-hid-mapper
@@ -22,10 +22,10 @@ hero:
 features:
   - icon: 🔌
     title: 即插即用，免焊接
-    details: 微雪 RP2350-USB-C 自带双 USB-C 口。原生口连主机，PIO-USB 口接键鼠或上位机，无需杜邦线。
+    details: RP2350 定制开发板集成手机 Type-C 口、串口与两个 USB-A 主机口。键鼠直插，串口接电脑，无需拓展坞。
   - icon: 🔄
-    title: PIO USB-C 双角色
-    details: Device（PC上位机控制） 或 Host（键鼠直连开发板，无需上位机） 。WebUI 一键切换。
+    title: 双 USB-A 键鼠直连
+    details: 键盘、鼠标、手柄直接插在板载 USB-A 主机口，映射在板内完成；上位机通过板载 USB 转串口（MAKCU 协议）控制。
   - icon: 📜
     title: Lua 脚本引擎
     details: 内置 Lua 5.4.6 解释器，支持按键宏、连点、时序序列、自定义事件，比静态配置更灵活。
@@ -39,41 +39,18 @@ features:
     title: iPadOS / iPhone 适配
     details: 目标平台一键切换（或选自动，设备识别主机系统自行切换），iPad / iPhone 直连后以触控板 + 鼠标形态出现（系统原生免驱），映射照常生效。
   - icon: 🛠️
-    title: WebHID 控制
-    details: 基于WebHID API的上位机控制工具，在浏览器中直接使用。
+    title: 上位机工具
+    details: 浏览器中通过串口连接设备，发送键鼠控制指令并查看调试信息。
   - icon: 🎮
     title: MAKCU 串口控制
-    details: 通过 UART 串口远程控制键鼠，支持 MAKCU 文本、V2、私有扩展帧与握手切速。
+    details: 通过板载 USB 转串口远程控制键鼠，支持 MAKCU 文本、V2、私有扩展帧与握手切速。
 ---
 
 ## 它能做什么？
 
-**pico-hid-mapper** 是一个运行在 **微雪 RP2350-USB-C** 上的固件，它可以通过自定义配置，将 USB 键盘/鼠标的操作实时转成触摸屏事件。
+**pico-hid-mapper** 是一个运行在 **RP2350 定制开发板**上的固件，它可以通过自定义配置，将 USB 键盘/鼠标的操作实时转成触摸屏事件。
 
 典型场景：
 - 🎮 **手游键鼠操控** — 用键盘 WASD 走位 + 鼠标控制视角
 - 🔫 **射击游戏辅助** — Lua 脚本编写压枪宏、连招，支持时序序列、自定义事件
-- 🤖 **自动化脚本** — 通过 WebSocket / WebHID 发送自定义事件到Lua脚本引擎
-
-## 硬件需求
-
-<div align="center">
-  <img src="/board.webp" alt="RP2350-USB-C" width="320" style="border-radius: 12px; margin: 16px 0;">
-  <p><strong>微雪 RP2350-USB-C</strong></p>
-  <img src="https://statistics.rd5isto.org/i/1db6d4ff-a871-493e-bcd0-59c4689adfc9" style="display:none;" >
-</div>
-
-无需焊接、无需杜邦线。板子自带双 USB-C 口：
-- **原生 USB-C**（靠近 RST 和 BOOT 按钮的一侧）→ 连接安卓设备（USB网卡 (CDC) + HID 触屏）
-- **PIO-USB-C**（靠近 CC1、CC2 电阻的一侧）→ 默认 **Host 模式**（直连键盘鼠标），可切换为 Device 模式（连接上位机接收 HID 指令）
-
-### 可选硬件
-
-**群友定制 RP2350A 键鼠映射板** — 有群友把本项目会用到的接口集成到了一块自制板子上：键鼠主机口、GPIO8 扩展 USB 主机口（可外接第二个键鼠设备），以及 MAKCU 串口的板载 USB 转串口（连接上位机时免自行焊接，也无需 USB-TTL 适配器）。固件刷写方式与微雪板一致。
-
-<div align="center">
-  <img src="/custom-board-1.jpg" alt="群友定制 RP2350A 键鼠映射板 实拍" width="360" style="border-radius: 12px; margin: 8px; vertical-align: middle;">
-  <img src="/custom-board-2.jpg" alt="群友定制 RP2350A 键鼠映射板 接口" width="560" style="border-radius: 12px; margin: 8px; vertical-align: middle;">
-</div>
-
-👉 购买：[【闲鱼】自制RP2350A键鼠映射硬件板](https://m.tb.cn/h.8AaQkvX?tk=SXrJTJu3PLy)
+- 🤖 **自动化脚本** — 通过 WebSocket / 串口发送自定义事件到Lua脚本引擎

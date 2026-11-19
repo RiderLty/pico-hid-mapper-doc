@@ -9,7 +9,7 @@ pico-hid-mapper 内置 **Lua 5.4.6** 解释器，让你用脚本自定义按键/
 ## 数据流
 
 ```
-USB HID 设备 / 手柄 (Gamepad) / 触摸板 / WebSocket / WebHID (键盘/鼠标/自定义事件)
+USB HID 设备 / 手柄 (Gamepad) / 触摸板 / WebSocket / 串口 55 AA 帧 (键盘/鼠标/自定义事件)
       │
       ▼
 映射引擎 (去抖 / 边沿检测)
@@ -33,7 +33,7 @@ Lua 引擎 (bitmap 过滤: 只有你声明监听的键/事件才进入 Lua VM)
 
 ```
 Web 前端 / LuaEditorDialog → WebSocket CMD 0x01 → ws_ipc → lua_binder_on_custom_event
-webctrl WebHID 工具         → HID OUT CMD 0xFA    → pio_device → lua_binder_on_custom_event
+串口 55 AA 帧 CMD 0xFA   → lua_binder_on_custom_event
 ```
 
 板载 BOOTSEL 按键路径（触发 `on_boot_button(pressed)`）：
@@ -120,7 +120,7 @@ end
 function tick(dt_us)
 end
 
--- 自定义字符串事件 (来自 WebSocket / WebHID)
+-- 自定义字符串事件 (来自 WebSocket / 串口 55 AA 帧)
 function on_custom_event(str)
     return false
 end
@@ -616,7 +616,7 @@ led_off()
 
 ## 状态屏 (lcd / 多模块行分配)
 
-> 所有固件都注册这些函数，但只有外接 ST7789 240×320 状态屏的硬件上才真正显示。无屏板型（普通 / 蓝牙固件）上 `lcd_status().available` 为 `false`：`lcd_acquire` 返回 `nil, "no lcd"`，`lcd_write` / `lcd_release` / `lcd_notify` 返回 `false`，`lcd_line` 静默无效。
+> 所有固件都注册这些函数，但只有外接 ST7789 240×320 状态屏的硬件上才真正显示。无屏硬件上 `lcd_status().available` 为 `false`：`lcd_acquire` 返回 `nil, "no lcd"`，`lcd_write` / `lcd_release` / `lcd_notify` 返回 `false`，`lcd_line` 静默无效。
 
 设备外接的 ST7789 状态屏（240×320）底部是脚本自定义区：**5 行 × 行高 24**。多个 Lua 模块共享这 5 行，通过**租约**申请与释放，互不冲突：
 

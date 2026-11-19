@@ -1,8 +1,10 @@
-# HIDAPI
+# 55 AA 控制帧
 
 > 📥 **下载此API文档**：<a href="/api/hid-api.md" download>hid-api.md</a>
 
-PIO 口切换为 **Device 模式**后，PIO-USB-C 口变为 generic HID 设备。上位机通过 HID OUT 端点发送 64B 命令帧控制设备，通过 HID IN 端点接收设备上报的事件。
+通过串口（MAKCU 私有扩展帧）发送 `55 AA` 控制帧，可直接驱动触屏、鼠标、键盘、手柄与 Lua 自定义事件。帧格式与设备内部 HID 控制帧一致，与 MAKCU 文本/V2 命令走同一套设备控制路径。
+
+> 串口连接方式与握手、切速见 [串口协议（MAKCU）](/api/serial-api)。
 
 ---
 
@@ -19,7 +21,7 @@ PIO 口切换为 **Device 模式**后，PIO-USB-C 口变为 generic HID 设备�
 | CMD | 1 | 命令码（见下表） |
 | PAYLOAD | LEN−1 | 命令数据 |
 
-- 整帧长度 = `3 + LEN`，单包 64B 内可容纳（LEN ≤ 61，payload ≤ 60）。
+- 整帧长度 = `3 + LEN`，单帧上限 64B（LEN ≤ 61，payload ≤ 60）。
 - 多字节字段统一**小端 (LE)**，与 HID 报告 / RP2350 原生字节序一致，可直接 `memcpy`。
 - 校验：header 错 / LEN 越界 / payload 被截断 → 丢弃，不上报。
 
@@ -68,7 +70,7 @@ payload 8 字节，标准 `mouse_report_x8`。复用 HID 鼠标解析：按键�
 
 | 偏移 | 字段 | 类型 | 说明 |
 |------|------|------|------|
-| 0 | report_id | u8 | device 模式忽略，填 0 |
+| 0 | report_id | u8 | 填 0 |
 | 1 | buttons | u8 | bit0 左 / bit1 右 / bit2 中 / bit3 前进 / bit4 后退 |
 | 2–3 | x | i16 LE | X 位移 |
 | 4–5 | y | i16 LE | Y 位移 |
@@ -227,7 +229,7 @@ payload 16 字节。将上位机采集的标准手柄状态注入映射引擎，
 
 ## CMD 0xFA — 自定义事件
 
-发送文本字符串到 Lua，触发 `on_custom_event(str)`。payload 为 UTF-8 文本，**最大 60 字节**（受 64B HID 报告限制，帧头占 4B）。
+发送文本字符串到 Lua，触发 `on_custom_event(str)`。payload 为 UTF-8 文本，**最大 60 字节**（受 64B 单帧限制，帧头占 4B）。
 
 ```
 55 AA LEN FA [text: UTF-8 string]
@@ -261,7 +263,7 @@ end
 
 ## CMD 0xF8 — DS5 裸报文直通
 
-payload 40 字节。将 DualSense（DS5）HID 输入报文的**前 40 字节**原样转发给设备，固件补零还原成完整 64B 报文后走与 USB Host 口实体手柄完全相同的解析链（hidkit `ds5_parse` → `core_input_gamepad_abs/btn/motion`），摇杆/按键/陀螺仪/加速度计全部进映射引擎，语义与插在 Host 口的 DS5 一致。
+payload 40 字节。将 DualSense（DS5）HID 输入报文的**前 40 字节**原样转发给设备，固件补零还原成完整 64B 报文后走与 USB-A 主机口实体手柄完全相同的解析链（hidkit `ds5_parse` → `core_input_gamepad_abs/btn/motion`），摇杆/按键/陀螺仪/加速度计全部进映射引擎，语义与插在 USB-A 主机口的 DS5 一致。
 
 ```
 55 AA 29 F8 [body 0..39 of dualsense_input_report]
@@ -280,41 +282,16 @@ payload 40 字节。将 DualSense（DS5）HID 输入报文的**前 40 字节**�
 | 31 | reserved | 1 | 原样转发 |
 | 32–39 | touch_point ×2 | 4B×2 | 触摸板触点（保留，后续适配） |
 
-**裁切规则**：只裁尾部。DS5 USB 输入报文 64B（含 Report ID `0x01`），偏移 40 起的 `reserved3[12] + status + reserved4[10]` 共 23 字节为保留段，裁掉后 40B 载荷 + 4B 帧头 = 44B，恰在 64B HID 报文限制内。偏移 0–39 的字节（含中间保留占位）必须原样转发，不做重排/压缩。
+**裁切规则**：只裁尾部。DS5 USB 输入报文 64B（含 Report ID `0x01`），偏移 40 起的 `reserved3[12] + status + reserved4[10]` 共 23 字节为保留段，裁掉后 40B 载荷 + 4B 帧头 = 44B，恰在 64B 单帧限制内。偏移 0–39 的字节（含中间保留占位）必须原样转发，不做重排/压缩。
 
 **蓝牙报文**：DS5 蓝牙输入报文为 78B（Report ID `0x31`），布局与 USB 相同但整体后移 1 字节；同样取 body 0–39 转发即可。
 
 **断连约定**：**全零 payload（40 字节全 0）= 上位机断开**。真 DS5 报文里摇杆中值恒为 0x80，全零 body 物理上不会出现。固件收到后释放该通道的手柄状态（按住的键补发松开、摇杆/陀螺仪归零）。上位机正常断开时应主动补发一帧全零；未补发（如页面崩溃）则固件侧最后状态残留。
 
-> 命令仅普通固件（PIO Device 模式）支持；DS5 蓝牙变体无 PIO 口，不响应 0xF8。
-
 ---
 
-## IN 端点事件
+## 上位机工具
 
-设备通过 IN 端点主动上报事件，由事件队列驱动。
-
-```
-[0x55][0xAA][LEN][EVT][DATA ...]
-```
-
-| EVT | 名称 | DATA | 触发条件 |
-|-----|------|------|----------|
-| `0x01` | 方向变化 | orientation:u8 (0..3) | 屏幕方向改变时 |
-
----
-
-## WebHID 控制工具
-
-为了方便调试，提供了一个浏览器端的 **[WebHID 控制工具](/webhid/index.html)**（PIO Device Sender），无需安装任何软件即可：
-
-- **连接设备** — 通过 WebHID API 直接选择并连接 Pico HID 设备
-- **命令构造** — 可视化构造上述所有 CMD（触屏/鼠标/键盘/core_input/Lua 事件/手柄报文），一键发送
-- **实时反馈** — 显示 sendReport 往返延迟（RTT），接收设备 IN 端点上报事件
-- **独占模式** — 锁定设备，防止其他应用干扰
-- **手柄可视化** — 采集电脑手柄（Gamepad API），实时显示摇杆位置、扳机力度、按钮状态，并通过 CMD 0xFC 子命令 0xF9 转发
-- **DS5 直连** — 通过 WebHID 直读 DualSense 原始报文（CMD 0xF8 转发），连接期间 Gamepad API 转发自动关断；支持摇杆/按键/陀螺仪，触摸板触点已随报文保留
-
-使用前提：PIO 口切换为 Device 模式，Chrome / Edge 浏览器，PIO-USB-C 口连接电脑。
+浏览器端的 **[WebHID 控制工具](/webhid/index.html)** 可通过串口连接设备，可视化构造上述命令并发送，同时查看设备日志与响应，无需安装软件。
 
 > 工具为纯前端页面，所有数据在浏览器本地处理，不会上传到任何服务器。
