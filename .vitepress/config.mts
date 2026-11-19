@@ -106,7 +106,7 @@ export default defineConfig({
     },
 
     footer: {
-      copyright: `Copyright © 2024–${new Date().getFullYear()} pico-hid-mapper`,
+      copyright: `Copyright © 2024–${new Date().getFullYear()} pico-hid-mapper<br><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">皖ICP备2026039864号</a> · <a href="https://beian.mps.gov.cn/#/query/webSearch?code=34110302000500" target="_blank" rel="noopener">皖公网安备34110302000500号</a>`,
     },
 
     outline: {
