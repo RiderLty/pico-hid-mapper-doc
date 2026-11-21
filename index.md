@@ -18,6 +18,11 @@ hero:
     - theme: alt
       text: QQ交流群
       link: https://qm.qq.com/cgi-bin/qm/qr?k=ADpjCCIKz79QSBBmKhr9fXjeGlEvnSUS&jump_from=webapi&authKey=l23Yp3dysdEgmHNrGUx52qHXUj36BKKZ86XfQ0AZy8D0nEXfETw1jHomeJR0ycjh
+    - theme: alt
+      text: 入手定制开发板
+      link: https://m.tb.cn/h.jnPsXuQ?tk=EUff6URIL10
+      target: _blank
+      rel: noopener
 
 features:
   - icon: 🔌
