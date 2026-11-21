@@ -12,6 +12,7 @@ pico-hid-mapper 提供三层可编程接口，支持键盘、鼠标、**手柄**
 ## 快速导航
 
 - **[映射配置说明](/api/mapper-config)** — 映射相关详细配置与功能介绍
+- **[外接显示器 / 采集卡](/api/external-display)** — 镜像 / 扩展显示下的分辨率与旋转设置
 - **[触屏转发（touch_forwarder）](/api/touch-forwarder)** — 安卓端让手搓与开发板映射共存
 - **[55 AA 控制帧](/api/hid-api)** — 串口私有扩展帧的完整命令参考
 - **[WebSocket API](/api/ws-api)** — 双向通信，自定义事件 + 实时日志
