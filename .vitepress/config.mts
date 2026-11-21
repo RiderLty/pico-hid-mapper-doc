@@ -90,6 +90,7 @@ export default defineConfig({
             { text: '总览', link: '/api/' },
             { text: '原理说明', link: '/api/principles' },
             { text: '映射配置说明', link: '/api/mapper-config' },
+            { text: '触屏转发（touch_forwarder）', link: '/api/touch-forwarder' },
             { text: '55 AA 控制帧', link: '/api/hid-api' },
             { text: 'WebSocket API', link: '/api/ws-api' },
             { text: 'Lua 脚本 API', link: '/api/lua-api' },

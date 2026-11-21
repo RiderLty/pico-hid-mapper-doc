@@ -190,7 +190,7 @@ payload 16 字节。将上位机采集的标准手柄状态注入映射引擎，
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/gamepad/params` | GET | 返回当前**生效**参数 blob（122 字节，`application/octet-stream`）|
+| `/gamepad/params` | GET | 返回当前**生效**参数 blob（130 字节，`application/octet-stream`；旧固件为 122 字节，新固件仍可读入）|
 | `/gamepad/params` | POST | 上传参数 blob 即时生效 **并持久化**（＝保存）|
 | `/gamepad/preview` | POST | 上传参数 blob **只写内存**即时生效，不碰 flash（＝预览）|
 | `/gamepad/exit` | POST | 放弃预览：从 flash 重读覆盖内存并重新应用（**不写 flash**）；随后 GET `/gamepad/params` 即得到恢复后的值 |
@@ -203,7 +203,7 @@ payload 16 字节。将上位机采集的标准手柄状态注入映射引擎，
 > `gyro_cal` 两个存储项（各走各自的端点）。`/gamepad/exit` 自身**只碰手柄参数**——
 > 它内部会重置视角/鼠标的积分累加器，但与陀螺仪校准和遥测流没有任何关系。
 
-默认参数：左/右摇杆死区 6.25%，回报率 500Hz，视角/鼠标灵敏度 1.0，曲线为空。详细参数格式见固件源码 `gamepad_args.h`。
+默认参数：左/右摇杆死区 6.25%，回报率 500Hz，视角灵敏度 X/Y 各 1.0（在响应曲线之后做整体缩放），鼠标灵敏度 1.0，曲线为空。详细参数格式见固件源码 `gamepad_args.h`。
 
 **陀螺仪校准**（设备级，不跟槽位走）：
 
