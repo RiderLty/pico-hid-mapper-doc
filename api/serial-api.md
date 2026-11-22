@@ -1,8 +1,8 @@
-# 串口协议（MAKCU）
+# 串口协议（MAKCU / Ferrum Legacy）
 
 > 📥 **下载此API文档**：<a href="/api/serial-api.md" download>serial-api.md</a>
 
-设备的 UART 串口（GPIO2/3，8N1）使用 **MAKCU 协议族**。设备开机默认 115200；主机先发送 `DE AD 05 00 A5 <baud LE32>` 握手帧，再切换到目标工作波特率（常用 4M）。握手、`km.version()`、`km.baud(n)` 和 V2 `0xB1` 属于传输控制，不受授权状态阻断；这样未激活设备仍能被网页发现、切速和连接。MAKCU 文本/V2 的实际键鼠注入、配置与调度命令受授权门控；网页使用的 55 AA 控制路径保持可用。运行期切速后重启恢复 115200。协议提供鼠标/键盘注入、连点、定时按压、字符串输入、平滑移动、按键锁定与物理输入屏蔽、状态遥测等能力。
+设备的 UART 串口（GPIO2/3，8N1）默认使用 **MAKCU 协议族**；也可在面板「参数配置 → 串口协议」切换为 **Ferrum Legacy API**（见文末「Ferrum Legacy 模式」）。设备开机默认 115200；MAKCU 主机先发送 `DE AD 05 00 A5 <baud LE32>` 握手帧，再切换到目标工作波特率（常用 4M）。握手、`km.version()`、`km.baud(n)` 和 V2 `0xB1` 属于传输控制，不受授权状态阻断；这样未激活设备仍能被网页发现、切速和连接。MAKCU 文本/V2 的实际键鼠注入、配置与调度命令受授权门控；网页使用的 55 AA 控制路径保持可用。运行期切速后重启恢复 115200。协议提供鼠标/键盘注入、连点、定时按压、字符串输入、平滑移动、按键锁定与物理输入屏蔽、状态遥测等能力。
 
 ## 命令通道
 
@@ -60,6 +60,32 @@ DE AD 05 00 A5 <baud:uint32 little-endian>
 - 帧格式：`[55 AA][LEN][CMD][payload...]`，LEN 为 CMD 与 payload 的总长度
 - 例：`55 AA 0E FC FF <dx:i32><dy:i32><wheel:i32>` 注入一次相对移动
 - 固件收到后在设备侧重放同一控制路径，语义与 55 AA 控制帧一致
+
+## Ferrum Legacy 模式
+
+面板「参数配置 → 串口协议」可把设备 UART 切到 **Ferrum Legacy API**，
+与 MAKCU 二选一，保存后立即生效。同一分组的「Ferrum 波特率」设置 Ferrum 模式的波特率：`0` = 默认
+115200；其余按原值（例如客户端固定用 921600/4000000 时填这里）。运行期 `km.baud(n)` 只切当前
+速率，不写回该设置。
+
+Ferrum Legacy 是**纯鼠标**协议，没有键盘注入；与 MAKCU 的线上差异：
+
+- **没有命令回显**。getter 返回 `<值>\r\n>>> `，setter 只回 `>>> `；`km.baud(...)` **无任何应答**，
+  `km.baud()` 也没有读能力。
+- `km.version()` 返回固定串 **`kmbox: 2.0.0 Aug 31 2020 21:49:51`**（Ferrum Legacy 官方值）。
+- 支持的命令：`left/right/middle/side1/side2`、`click`（**0=左**…4=前侧，按下 75–125ms）、
+  `lock_ml/mr/mm/ms1/ms2`、`lock_mx/my/mw` 及方向锁、`move`、`wheel`（-128..127）、
+  `buttons`（回调）、`version`、`baud`。
+- `km.buttons(1)` 后回调格式为 `km.<原始掩码字节>\r\n>>> `，bit0..4=左/右/中/后侧/前侧。
+  查询/回调都只反映**输入侧物理按键状态**（`lock_*` 只遮蔽输出，不影响读数）。
+- `km.left()` 等查询返回 **0/1**（不是 MAKCU 的 0/1/2/3 来源位图）。
+- 掩码 `0x00`（全部松开）= NUL、`0x0A`=LF、`0x0D`=CR；Legacy 没有安全模式，客户端必须按字节
+  读取 `km.` 后的第 4 字节，不能按行/字符串切分。
+- 不支持：键盘、`Keys()` 回调、`km.init`、`km.echo`、`;` 多命令、`ferrum.version()`、
+  `device.VID/PID`、`km.has_*`、`km.catch_xy`。
+
+切换协议会释放已注入的按键/键并停止状态流，上位机需按新协议和新波特率重新连接。切回 MAKCU
+后设备回到 115200。详细矩阵与验证清单见固件仓库 `docs/FERRUM_COMPAT.md`。
 
 ## 噪声处理说明
 
