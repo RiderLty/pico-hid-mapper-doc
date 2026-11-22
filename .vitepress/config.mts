@@ -91,6 +91,7 @@ export default defineConfig({
             { text: '原理说明', link: '/api/principles' },
             { text: '外接显示器 / 采集卡', link: '/api/external-display' },
             { text: '映射配置说明', link: '/api/mapper-config' },
+            { text: '按键转换（input_remap）', link: '/api/input-remap' },
             { text: '触屏转发（touch_forwarder）', link: '/api/touch-forwarder' },
             { text: '55 AA 控制帧', link: '/api/hid-api' },
             { text: 'WebSocket API', link: '/api/ws-api' },
