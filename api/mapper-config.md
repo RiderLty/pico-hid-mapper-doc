@@ -41,6 +41,7 @@
     "SHIFT_RANGE_ENABLE": true,
     "SHIFT_RANGE_SWITCH_ENABLE": true,
     "SHIFT_RANGE_SWITCH_KEEP_ENABLE": false,
+    "FORCE_RECENTER_ENABLE": false,
     "WASD": ["KEY_W", "KEY_A", "KEY_S", "KEY_D"]
   },
   "KEY_MAPS": {
@@ -82,6 +83,7 @@
 | `WHEEL.SHIFT_RANGE_ENABLE` | 是否启用 Shift 疾跑模式。 |
 | `WHEEL.SHIFT_RANGE_SWITCH_ENABLE` | 疾跑切换方式：`true` 表示点击开启、再点击关闭；`false` 表示按住开启、松开关闭。 |
 | `WHEEL.SHIFT_RANGE_SWITCH_KEEP_ENABLE` | 仅疾跑切换方式有效：`true` 表示松开 WASD 后保持疾跑状态（下次按下仍以疾跑半径起步）；`false` 表示松开 WASD 自动取消疾跑。 |
+| `WHEEL.FORCE_RECENTER_ENABLE` | **强制回中**：`true` 时松开全部方向键后，先抬起轮盘触点，再在轮盘中心（叠加 `WHEEL.RAND_RANGE` 随机偏移）快速补一次点击，用于打断部分游戏「松键后仍持续奔跑」的行为。点击期间重新按下方向键会直接接管，不影响操作。仅安卓触屏形态生效（苹果触控板形态下会被当成一次鼠标点击，固件自动禁用）。旧配置无此字段时按 `false`。 |
 | `WHEEL.WASD` | 控制轮盘的四个方向键，顺序固定 = 上、左、下、右（默认 `["KEY_W", "KEY_A", "KEY_S", "KEY_D"]`）。可改成任意键盘按键（例如改成 `["KEY_E", "KEY_S", "KEY_D", "KEY_F"]` 即 ESDF 布局）。 |
 | `IMG` | 截图的 base64 字符串。存储到 PICO 时会丢失，前端导出 JSON 时会保留。 |
 | `KEY_MAPS` | 按键映射字典。 |
@@ -253,6 +255,7 @@
 | 疾跑触发方式（长按 / 切换） | 疾跑触发方式（`WHEEL.SHIFT_RANGE_SWITCH_ENABLE`），两个模式二选一：长按＝按住疾跑键才生效；切换＝点一下切换疾跑状态。 |
 | 松开方向键后（保持 / 重置） | 仅切换模式下显示（`WHEEL.SHIFT_RANGE_SWITCH_KEEP_ENABLE`），二选一：松开方向键后保持疾跑，或回到走路半径。 |
 | 疾跑 / 静步（常规 / 互换） | 仅启用 shift 轮盘时显示（`WHEEL.SHIFT_RANGE_SWAP_ENABLE`），二选一：互换＝默认疾跑、按疾跑键变静步。 |
+| 强制回中（已启用 / 已禁用） | 松开全部方向键后，在轮盘中心（叠加「初始位置随机范围」）补一次点击（`WHEEL.FORCE_RECENTER_ENABLE`），打断部分游戏松键后的持续奔跑；点击期间再按方向键会直接接管，不影响操作。仅安卓触屏形态生效（苹果触控板形态下会被当成鼠标点击，固件自动禁用）。 |
 
 > 上述"二选一"在面板上用**分段按钮**表示（两个选项并排、当前生效的高亮），而不是开关——开关的语义是"开/关"，表达不了"A 模式 / B 模式"。真正的开/关（如「shift 轮盘」是否启用、「释放光标」是否退出映射）仍用开关。
 | 疾跑半径 | 疾跑外环半径的滑条（`WHEEL.SHIFT_RANGE`），仅启用 shift 轮盘时显示。 |
